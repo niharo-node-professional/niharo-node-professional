@@ -13,5 +13,8 @@
   },
   "keywords": ["warehouse", "wms", "node", "pwa", "inventory"],
   "author": "Niharo",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
 }

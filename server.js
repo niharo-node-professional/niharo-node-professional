@@ -6,6 +6,8 @@ const fsp = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
+let XLSX = null;
+try { XLSX = require('xlsx'); } catch (_) { XLSX = null; }
 
 loadEnv();
 
@@ -287,7 +289,7 @@ function json(res, code, obj) {
 async function body(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (chunk) => { data += chunk; if (data.length > 5 * 1024 * 1024) reject(new Error('Payload too large')); });
+    req.on('data', (chunk) => { data += chunk; if (data.length > 15 * 1024 * 1024) reject(new Error('Payload too large')); });
     req.on('end', () => {
       if (!data) return resolve({});
       try { resolve(JSON.parse(data)); } catch (_) { reject(new Error('Invalid JSON')); }
@@ -295,6 +297,49 @@ async function body(req) {
     req.on('error', reject);
   });
 }
+
+function spreadsheetRowsFromBase64(base64, filename) {
+  if (!XLSX) throw new Error('Excel parser missing. package.json dependencies install hone dein, phir redeploy karein.');
+  const clean = String(base64 || '').replace(/^data:.*?;base64,/, '');
+  if (!clean) throw new Error('File data missing');
+  const buffer = Buffer.from(clean, 'base64');
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const sheetName = wb.SheetNames && wb.SheetNames[0];
+  if (!sheetName) throw new Error('Excel sheet blank hai');
+  const ws = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  return rows.map(r => (Array.isArray(r) ? r.map(c => String(c ?? '').trim()) : [])).filter(r => r.some(Boolean));
+}
+function findHeaderIndex(rows, requiredWords) {
+  for (let i = 0; i < rows.length; i++) {
+    const joined = rows[i].map(c => String(c || '').toLowerCase()).join(' | ');
+    if (requiredWords.every(w => joined.includes(w))) return i;
+  }
+  return rows.length && rows[0].length > 1 ? 0 : -1;
+}
+function productsFromRows(rows) {
+  const idx = findHeaderIndex(rows, ['product']);
+  const start = idx >= 0 ? idx + 1 : 0;
+  const out = [];
+  for (const r of rows.slice(start)) {
+    const first = String(r[0] || '').trim();
+    if (!first || /^niharo/i.test(first) || /^product\s*name$/i.test(first)) continue;
+    out.push({ name: first, location: r[1] || 'MAIN', available: r[2] || 0 });
+  }
+  return out;
+}
+function partiesFromRows(rows) {
+  const idx = findHeaderIndex(rows, ['party']);
+  const start = idx >= 0 ? idx + 1 : 0;
+  const out = [];
+  for (const r of rows.slice(start)) {
+    const first = String(r[0] || '').trim();
+    if (!first || /^niharo/i.test(first) || /^party\s*name$/i.test(first)) continue;
+    out.push(first);
+  }
+  return out;
+}
+
 async function okState(res) {
   json(res, 200, { ok: true, state: await currentState() });
 }
@@ -346,6 +391,42 @@ async function handleApi(req, res, url) {
       store.products[name].updatedAt = today().iso;
     });
     return okState(res);
+  }
+
+
+  if (m === 'POST' && p === '/api/products/import-file') {
+    if (!need(req, res, ['admin'])) return;
+    const b = await body(req);
+    let products = [];
+    try { products = productsFromRows(spreadsheetRowsFromBase64(b.base64, b.filename)); }
+    catch (e) { return bad(res, e.message || 'Excel read nahi ho paayi'); }
+    if (!products.length) return bad(res, 'Product rows nahi mili. Columns: Product Name, Category, Available Stock');
+    await updateStore((store) => {
+      for (const raw of products) {
+        const name = productName(raw.name || raw.product || raw['Product Name']);
+        if (!name) continue;
+        const location = productName(raw.location || raw.Location || raw.category || raw.Category || 'MAIN') || 'MAIN';
+        const available = Math.max(0, Number(raw.available ?? raw.stock ?? raw['Available Stock'] ?? 0));
+        store.products[name] = { name, location, available, lastStatus: 'Imported from Excel', updatedAt: today().iso };
+      }
+    });
+    return json(res, 200, { ok: true, imported: products.length, state: await currentState() });
+  }
+
+  if (m === 'POST' && p === '/api/parties/import-file') {
+    if (!need(req, res, ['admin'])) return;
+    const b = await body(req);
+    let parties = [];
+    try { parties = partiesFromRows(spreadsheetRowsFromBase64(b.base64, b.filename)); }
+    catch (e) { return bad(res, e.message || 'Excel read nahi ho paayi'); }
+    if (!parties.length) return bad(res, 'Party rows nahi mili. Column: Party Name');
+    await updateStore((store) => {
+      for (const raw of parties) {
+        const name = String(raw || '').trim();
+        if (name && !store.parties.includes(name)) store.parties.push(name);
+      }
+    });
+    return json(res, 200, { ok: true, imported: parties.length, state: await currentState() });
   }
 
 

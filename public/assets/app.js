@@ -603,6 +603,21 @@ function parseDelimitedLine(line) {
   out.push(cur.trim());
   return out.map(cell => cell.replace(/^"|"$/g, '').trim());
 }
+
+async function fileToBase64(file) {
+  const buffer = await file.arrayBuffer();
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+function isExcelWorkbook(file) {
+  return /\.xlsx$/i.test(file.name || '') || (/\.xls$/i.test(file.name || '') && !/format/i.test(file.name || ''));
+}
+
 function parseSheetText(text) {
   const raw = String(text || '');
   if (/<table[\s\S]*<\/table>/i.test(raw) || /<tr[\s>]/i.test(raw)) {
@@ -623,10 +638,18 @@ function parseSheetText(text) {
   return lines.map(parseDelimitedLine);
 }
 async function importProductsFromFile(file) {
+  if (/\.xlsx$/i.test(file.name || '')) {
+    const data = await api('/api/products/import-file', { method: 'POST', body: { filename: file.name, base64: await fileToBase64(file) } });
+    state = normalizeState(data.state || data.data);
+    renderAll();
+    toast((data.imported || 0) + ' products imported/updated', 'success');
+    return;
+  }
   const rows = parseSheetText(await file.text());
   if (rows.length < 2) throw new Error('File blank hai. Pehle format download karke fill karein.');
-  const dataRows = rows.slice(1);
-  const products = dataRows.map(r => ({ name: r[0], location: r[1] || 'MAIN', available: r[2] || 0 })).filter(p => String(p.name || '').trim());
+  const headerIdx = rows.findIndex(r => String(r.join(' ')).toLowerCase().includes('product'));
+  const dataRows = rows.slice(headerIdx >= 0 ? headerIdx + 1 : 1);
+  const products = dataRows.map(r => ({ name: r[0], location: r[1] || 'MAIN', available: r[2] || 0 })).filter(p => String(p.name || '').trim() && !/^NIHARO/i.test(String(p.name || '')));
   if (!products.length) throw new Error('Product rows nahi mili. Columns: Product Name, Category, Available Stock');
   const data = await api('/api/products/bulk', { method: 'POST', body: { products } });
   state = normalizeState(data.state || data.data);
@@ -634,9 +657,17 @@ async function importProductsFromFile(file) {
   toast(products.length + ' products imported/updated', 'success');
 }
 async function importPartiesFromFile(file) {
+  if (/\.xlsx$/i.test(file.name || '')) {
+    const data = await api('/api/parties/import-file', { method: 'POST', body: { filename: file.name, base64: await fileToBase64(file) } });
+    state = normalizeState(data.state || data.data);
+    renderAll();
+    toast((data.imported || 0) + ' parties imported/updated', 'success');
+    return;
+  }
   const rows = parseSheetText(await file.text());
   if (rows.length < 2) throw new Error('File blank hai. Pehle format download karke fill karein.');
-  const parties = rows.slice(1).map(r => r[0]).filter(p => String(p || '').trim());
+  const headerIdx = rows.findIndex(r => String(r.join(' ')).toLowerCase().includes('party'));
+  const parties = rows.slice(headerIdx >= 0 ? headerIdx + 1 : 1).map(r => r[0]).filter(p => String(p || '').trim() && !/^NIHARO/i.test(String(p || '')));
   if (!parties.length) throw new Error('Party rows nahi mili. Column: Party Name');
   const data = await api('/api/parties/bulk', { method: 'POST', body: { parties } });
   state = normalizeState(data.state || data.data);

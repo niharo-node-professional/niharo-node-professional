@@ -510,8 +510,9 @@ async function handleApi(req, res, url) {
     const items = Array.isArray(b.items) ? b.items.map(normalizeItem).filter(Boolean) : [];
     if (!party || !items.length) return bad(res, 'Party and cart items required');
     await updateStore((store) => {
+      if (a.role === 'salesman' && !store.salesmen[username(a.user)]) throw new Error('Salesman account reset/delete ho gaya. Dobara login karein.');
       const t = today();
-      const bookedBy = a.role === 'salesman' ? a.user : String(b.salesman || 'OFFICE ADMIN').trim() || 'OFFICE ADMIN';
+      const bookedBy = a.role === 'salesman' ? username(a.user) : String(b.salesman || 'OFFICE ADMIN').trim() || 'OFFICE ADMIN';
       for (const item of items) {
         if (!store.products[item.product]) store.products[item.product] = { name: item.product, location: 'MAIN', available: 0, lastStatus: 'Auto added from order', updatedAt: t.iso };
       }

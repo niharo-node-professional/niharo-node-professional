@@ -49,7 +49,29 @@ async function api(path, options = {}) {
   return data;
 }
 function setLive(ok) { $('phoneLive').innerHTML = `<span class="status-dot"></span>${ok ? 'Live' : 'Offline'}`; $('phoneLive').style.background = ok ? 'rgba(255,255,255,.18)' : 'rgba(255,180,120,.28)'; }
-async function loadState() { const data = await api('/api/state'); state = normalizeState(data.data || data.state); setLive(true); renderAll(); }
+function activeSalesmanExists() {
+  if (!user || !user.username) return false;
+  return (state.salesmen || []).some(s => String(s.username || '').toLowerCase() === String(user.username || '').toLowerCase());
+}
+function forceSalesmanLogout(message) {
+  token = '';
+  user = null;
+  cart = [];
+  localStorage.removeItem('niharo_salesman_token');
+  localStorage.removeItem('niharo_salesman_user');
+  showApp();
+  if (message) toast(message, 'error');
+}
+async function loadState() {
+  const data = await api('/api/state');
+  state = normalizeState(data.data || data.state);
+  setLive(true);
+  if (token && user && !activeSalesmanExists()) {
+    forceSalesmanLogout('Account reset/delete ho gaya. Dobara login karein.');
+    return;
+  }
+  renderAll();
+}
 function startPolling() { loadState().catch(()=>setLive(false)); setInterval(()=>loadState().catch(()=>setLive(false)), 10000); }
 function showApp() { const logged = Boolean(token && user); $('loginView').style.display = logged ? 'none' : ''; $('appView').style.display = logged ? '' : 'none'; $('phoneNav').style.display = logged ? '' : 'none'; $('salesmanGreeting').textContent = logged ? `Welcome, ${String(user.username || '').toUpperCase()}` : 'Professional phone web app'; $('smAccountName').textContent = logged ? String(user.username || '').toUpperCase() : ''; }
 function preserveSelect(select, html) { const value = select.value; select.innerHTML = html; if ([...select.options].some(o=>o.value===value)) select.value = value; }
@@ -152,7 +174,7 @@ function initEvents() {
   $('smAddItem').addEventListener('click', () => { const typedProduct = ($('smProductSearch').value || '').trim(); const matchedProduct = productKeys().find(p => p.toLowerCase() === typedProduct.toLowerCase()); const product = matchedProduct || typedProduct.toUpperCase(); const qtyValue = Number.parseFloat($('smQty').value || '0') || 0; const rate = Number.parseFloat($('smRate').value || '0') || 0; if (!matchedProduct || qtyValue <= 0) return toast('List me se valid product aur qty select karein', 'error'); const availableNow = bookableStock(product); if (qtyValue > availableNow && !confirm(`Bookable stock ${qty(availableNow)} pcs hai. Phir bhi order add karein?`)) return; const existing = cart.find(i=>i.product===product); if (existing) { existing.qty += qtyValue; existing.rate = rate; } else cart.push({ product, qty: qtyValue, rate }); $('smProductSearch').value = ''; $('smQty').value = ''; $('smRate').value = ''; renderAll(); setTimeout(() => $('smProductSearch').focus(), 50); });
   $('smSubmitOrder').addEventListener('click', async () => { const party = ($('smPartySearch').value || '').trim(); const validParty = (state.parties || []).some(p => String(p).toLowerCase() === party.toLowerCase()); if (!party || !cart.length) return toast('Party aur cart required', 'error'); if (!validParty) return toast('List me se valid party select karein', 'error'); try { const data = await api('/api/orders', { method: 'POST', body: { party, items: cart } }); state = normalizeState(data.state || data.data); cart = []; $('smPartySearch').value = ''; $('smProductSearch').value = ''; $('smQty').value = ''; $('smRate').value = ''; renderAll(); toast('Order submitted live', 'success'); } catch(e) { toast(e.message, 'error'); } });
   $('smStockSearch').addEventListener('input', renderStock);
-  $('smLogoutBtn').addEventListener('click', () => { token = ''; user = null; localStorage.removeItem('niharo_salesman_token'); localStorage.removeItem('niharo_salesman_user'); cart = []; renderAll(); });
+  $('smLogoutBtn').addEventListener('click', () => { forceSalesmanLogout('Logged out'); });
   $('installHintBtn').addEventListener('click', () => toast('Chrome menu se Install app / Add to Home Screen dabao.'));
 }
 setInterval(() => { if (token) renderTargets(); }, 60000);

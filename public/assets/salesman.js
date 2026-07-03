@@ -5,6 +5,7 @@ let token = localStorage.getItem('niharo_salesman_token') || '';
 let user = JSON.parse(localStorage.getItem('niharo_salesman_user') || 'null');
 let state = { products: {}, parties: [], orders: [], salesmen: [] };
 let cart = [];
+let editingOrderId = null;
 
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 function money(value) { return '₹' + Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 }); }
@@ -57,6 +58,7 @@ function forceSalesmanLogout(message) {
   token = '';
   user = null;
   cart = [];
+  editingOrderId = null;
   localStorage.removeItem('niharo_salesman_token');
   localStorage.removeItem('niharo_salesman_user');
   showApp();
@@ -90,6 +92,41 @@ function renderDropdowns() {
   const partyList = $('smPartyList');
   if (partyList) partyList.innerHTML = (state.parties || []).map(p => `<option value="${escapeHtml(p)}"></option>`).join('');
 }
+function resetOrderForm() {
+  editingOrderId = null;
+  cart = [];
+  $('smPartySearch').value = '';
+  $('smProductSearch').value = '';
+  $('smQty').value = '';
+  $('smRate').value = '';
+  const btn = $('smSubmitOrder');
+  if (btn) btn.textContent = 'Submit order';
+  const cancelBtn = $('smCancelEdit');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  renderCart();
+}
+function enterOrderEdit(orderId) {
+  const order = (state.orders || []).find(o => o.id === orderId);
+  if (!order) return toast('Order not found', 'error');
+  if (isDelivered(order)) return toast('Delivered order edit nahi ho sakta', 'error');
+  editingOrderId = orderId;
+  $('smPartySearch').value = order.party || '';
+  cart = (order.items || []).map(i => ({ product: i.product, qty: Number(i.qty || 0), rate: Number(i.rate || 0) }));
+  $('smProductSearch').value = '';
+  $('smQty').value = '';
+  $('smRate').value = '';
+  $('smSubmitOrder').textContent = 'Update pending order';
+  const cancelBtn = $('smCancelEdit');
+  if (cancelBtn) cancelBtn.style.display = '';
+  $$('#phoneNav button').forEach(b=>b.classList.remove('active'));
+  const orderBtn = $$('#phoneNav button').find(b=>b.dataset.phone === 'order');
+  if (orderBtn) orderBtn.classList.add('active');
+  $$('.phone-screen').forEach(s=>s.style.display = 'none');
+  $('phone-order').style.display = '';
+  renderCart();
+  toast('Pending order edit mode open', 'success');
+}
+window.enterOrderEdit = enterOrderEdit;
 function filteredProducts() {
   const q = (($('smProductSearch')?.value || '')).trim().toLowerCase();
   const products = productKeys();
@@ -125,6 +162,7 @@ function renderOrders() {
       <div class="history-details">
         ${itemsHtml(o)}
         <div class="history-total">Total: ${money(orderTotal(o))}</div>
+        ${isDelivered(o) ? '' : `<button class="btn btn-warning btn-sm" style="margin-top:10px" onclick="enterOrderEdit('${escapeHtml(o.id)}')">Edit before delivery</button>`}
       </div>
     </details>`;
   }).join('') || '<div class="empty-state">Abhi koi order nahi hai.</div>';
@@ -172,7 +210,9 @@ function initEvents() {
   const productBox = $('smProductSuggestions');
   if (productBox) productBox.addEventListener('mousedown', (e) => { const btn = e.target.closest('.product-suggestion-item'); if (!btn) return; e.preventDefault(); selectProductName(btn.dataset.product || btn.textContent); });
   $('smAddItem').addEventListener('click', () => { const typedProduct = ($('smProductSearch').value || '').trim(); const matchedProduct = productKeys().find(p => p.toLowerCase() === typedProduct.toLowerCase()); const product = matchedProduct || typedProduct.toUpperCase(); const qtyValue = Number.parseFloat($('smQty').value || '0') || 0; const rate = Number.parseFloat($('smRate').value || '0') || 0; if (!matchedProduct || qtyValue <= 0) return toast('List me se valid product aur qty select karein', 'error'); const availableNow = bookableStock(product); if (qtyValue > availableNow && !confirm(`Bookable stock ${qty(availableNow)} pcs hai. Phir bhi order add karein?`)) return; const existing = cart.find(i=>i.product===product); if (existing) { existing.qty += qtyValue; existing.rate = rate; } else cart.push({ product, qty: qtyValue, rate }); $('smProductSearch').value = ''; $('smQty').value = ''; $('smRate').value = ''; renderAll(); setTimeout(() => $('smProductSearch').focus(), 50); });
-  $('smSubmitOrder').addEventListener('click', async () => { const party = ($('smPartySearch').value || '').trim(); const validParty = (state.parties || []).some(p => String(p).toLowerCase() === party.toLowerCase()); if (!party || !cart.length) return toast('Party aur cart required', 'error'); if (!validParty) return toast('List me se valid party select karein', 'error'); try { const data = await api('/api/orders', { method: 'POST', body: { party, items: cart } }); state = normalizeState(data.state || data.data); cart = []; $('smPartySearch').value = ''; $('smProductSearch').value = ''; $('smQty').value = ''; $('smRate').value = ''; renderAll(); toast('Order submitted live', 'success'); } catch(e) { toast(e.message, 'error'); } });
+  $('smSubmitOrder').addEventListener('click', async () => { const party = ($('smPartySearch').value || '').trim(); const validParty = (state.parties || []).some(p => String(p).toLowerCase() === party.toLowerCase()); if (!party || !cart.length) return toast('Party aur cart required', 'error'); if (!validParty) return toast('List me se valid party select karein', 'error'); try { const data = await api(editingOrderId ? `/api/orders/${encodeURIComponent(editingOrderId)}` : '/api/orders', { method: editingOrderId ? 'PATCH' : 'POST', body: { party, items: cart } }); state = normalizeState(data.state || data.data); resetOrderForm(); renderAll(); toast(editingOrderId ? 'Order updated live' : 'Order submitted live', 'success'); } catch(e) { toast(e.message, 'error'); } });
+  const cancelEditBtn = $('smCancelEdit');
+  if (cancelEditBtn) cancelEditBtn.addEventListener('click', () => { resetOrderForm(); toast('Edit cancelled'); });
   $('smStockSearch').addEventListener('input', renderStock);
   $('smLogoutBtn').addEventListener('click', () => { forceSalesmanLogout('Logged out'); });
   $('installHintBtn').addEventListener('click', () => toast('Chrome menu se Install app / Add to Home Screen dabao.'));

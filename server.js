@@ -625,6 +625,34 @@ async function handleApi(req, res, url) {
     return okState(res);
   }
   const orderMatch = p.match(/^\/api\/orders\/([^/]+)$/);
+  if (orderMatch && m === 'PATCH') {
+    const a = need(req, res, ['admin', 'salesman']);
+    if (!a) return;
+    const id = orderMatch[1];
+    const b = await body(req);
+    const party = String(b.party || '').trim();
+    const items = Array.isArray(b.items) ? b.items.map(normalizeItem).filter(Boolean) : [];
+    if (!party || !items.length) return bad(res, 'Party and cart items required');
+    await updateStore((store) => {
+      const order = store.orders.find((o) => o.id === id);
+      if (!order) throw new Error('Order not found');
+      if (status(order.status) === 'Delivered') throw new Error('Delivered order edit nahi ho sakta');
+      if (a.role === 'salesman') {
+        const me = username(a.user);
+        if (!store.salesmen[me]) throw new Error('Salesman account reset/delete ho gaya. Dobara login karein.');
+        if (username(order.salesman) !== me) throw new Error('Aap sirf apna order edit kar sakte hain');
+      }
+      const t = today();
+      for (const item of items) {
+        if (!store.products[item.product]) store.products[item.product] = { name: item.product, location: 'MAIN', available: 0, lastStatus: 'Auto added from order edit', updatedAt: t.iso };
+      }
+      if (!store.parties.includes(party)) store.parties.push(party);
+      order.party = party;
+      order.items = items;
+      order.updatedAt = t.iso;
+    });
+    return okState(res);
+  }
   if (orderMatch && m === 'DELETE') {
     if (!need(req, res, ['admin'])) return;
     const id = orderMatch[1];

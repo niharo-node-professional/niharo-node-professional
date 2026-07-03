@@ -8,6 +8,8 @@ const crypto = require('crypto');
 const { URL } = require('url');
 let XLSX = null;
 try { XLSX = require('xlsx'); } catch (_) { XLSX = null; }
+let Pool = null;
+try { ({ Pool } = require('pg')); } catch (_) { Pool = null; }
 
 loadEnv();
 
@@ -18,6 +20,10 @@ const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '1234';
 const APP_SECRET = process.env.APP_SECRET || 'change-this-niharo-secret';
 const DB_FILE = path.resolve(ROOT, process.env.DB_FILE || './data/store.json');
+const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
+const USE_POSTGRES = !!DATABASE_URL;
+const STORE_KEY = 'main';
+const pgPool = USE_POSTGRES && Pool ? new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } }) : null;
 
 let storeCache = null;
 let writeQueue = Promise.resolve();
@@ -187,12 +193,40 @@ function normalizeItem(item) {
 }
 
 async function ensureStore() {
+  if (USE_POSTGRES) {
+    if (!pgPool) throw new Error('DATABASE_URL set hai, lekin pg package install nahi hua. package.json update karke redeploy karein.');
+    await pgPool.query(`CREATE TABLE IF NOT EXISTS niharo_store (
+      key text PRIMARY KEY,
+      data jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`);
+    const existing = await pgPool.query('SELECT data FROM niharo_store WHERE key = $1', [STORE_KEY]);
+    if (!existing.rows.length) {
+      let initial = emptyStore();
+      try {
+        if (fs.existsSync(DB_FILE)) {
+          const raw = await fsp.readFile(DB_FILE, 'utf8');
+          initial = normalizeStore(JSON.parse(raw || '{}'));
+        }
+      } catch (_) {}
+      await pgPool.query(
+        'INSERT INTO niharo_store(key, data, updated_at) VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO NOTHING',
+        [STORE_KEY, JSON.stringify(initial)]
+      );
+    }
+    return;
+  }
   await fsp.mkdir(DATA_DIR, { recursive: true });
   if (!fs.existsSync(DB_FILE)) await fsp.writeFile(DB_FILE, JSON.stringify(emptyStore(), null, 2));
 }
 async function loadStore() {
   await ensureStore();
   if (storeCache) return storeCache;
+  if (USE_POSTGRES) {
+    const result = await pgPool.query('SELECT data FROM niharo_store WHERE key = $1', [STORE_KEY]);
+    storeCache = normalizeStore((result.rows[0] && result.rows[0].data) || {});
+    return storeCache;
+  }
   try {
     const raw = await fsp.readFile(DB_FILE, 'utf8');
     storeCache = normalizeStore(JSON.parse(raw || '{}'));
@@ -205,7 +239,14 @@ async function loadStore() {
   return storeCache;
 }
 async function saveStore(store) {
-  store.meta = Object.assign({}, store.meta || {}, { savedAt: today().iso });
+  store.meta = Object.assign({}, store.meta || {}, { savedAt: today().iso, storage: USE_POSTGRES ? 'postgres' : 'json' });
+  if (USE_POSTGRES) {
+    await pgPool.query(
+      'INSERT INTO niharo_store(key, data, updated_at) VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()',
+      [STORE_KEY, JSON.stringify(store)]
+    );
+    return;
+  }
   await fsp.mkdir(path.dirname(DB_FILE), { recursive: true });
   const tmp = DB_FILE + '.tmp';
   await fsp.writeFile(tmp, JSON.stringify(store, null, 2));
@@ -350,7 +391,7 @@ async function handleApi(req, res, url) {
   const m = req.method;
   const p = decodeURIComponent(url.pathname);
 
-  if (m === 'GET' && p === '/api/health') return json(res, 200, { ok: true, app: 'Niharo WMS Pro', time: new Date().toISOString() });
+  if (m === 'GET' && p === '/api/health') return json(res, 200, { ok: true, app: 'Niharo WMS Pro', storage: USE_POSTGRES ? 'postgres' : 'json', time: new Date().toISOString() });
   if (m === 'GET' && p === '/api/state') return json(res, 200, { state: await currentState() });
   if (m === 'GET' && p === '/api/events') return openEvents(req, res);
 
@@ -753,6 +794,7 @@ const server = http.createServer(async (req, res) => {
 ensureStore().then(() => {
   server.listen(PORT, '0.0.0.0', () => {
     console.log('Niharo WMS Pro running');
+    console.log('Storage:', USE_POSTGRES ? 'Supabase/PostgreSQL' : 'JSON file');
     console.log('Dashboard: http://localhost:' + PORT + '/');
     console.log('Salesman web: http://localhost:' + PORT + '/salesman');
     if (APP_SECRET.includes('change-this')) console.log('Warning: set APP_SECRET in .env before public hosting.');

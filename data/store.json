@@ -1,0 +1,161 @@
+{
+  "products": {
+    "M350": {
+      "name": "M350",
+      "location": "OIL GODWON",
+      "available": 0,
+      "lastStatus": "Delivered outward",
+      "updatedAt": "2026-07-02T12:29:02.772Z"
+    },
+    "M450": {
+      "name": "M450",
+      "location": "OIL GODWON",
+      "available": 15,
+      "lastStatus": "+15 In",
+      "updatedAt": "2026-07-02T11:30:26.892Z"
+    },
+    "M700": {
+      "name": "M700",
+      "location": "OIL GODWON",
+      "available": 20,
+      "lastStatus": "+20 In",
+      "updatedAt": "2026-07-02T11:30:39.745Z"
+    },
+    "M500": {
+      "name": "M500",
+      "location": "OIL",
+      "available": 10,
+      "lastStatus": "+10 In",
+      "updatedAt": "2026-07-02T12:53:28.020Z"
+    }
+  },
+  "parties": [
+    "ONKAR MAL SANJAY KUMAR TARANAGAR",
+    "TAYAL ENTERPRISES HISAR",
+    "SHIV SHAKTI JIND"
+  ],
+  "orders": [
+    {
+      "id": "984ccfe8-62bc-4fbc-b6fc-d1c77b04d8c0",
+      "party": "SHIV SHAKTI JIND",
+      "salesman": "rahul",
+      "date": "2026-07-02",
+      "time": "17:47",
+      "status": "Delivered",
+      "items": [
+        {
+          "product": "M350",
+          "qty": 15,
+          "rate": 1500
+        }
+      ],
+      "createdAt": "2026-07-02T12:17:15.240Z",
+      "deliveredDate": "2026-07-02"
+    },
+    {
+      "id": "4c99f7e8-2ef9-468c-89a4-80583bc1b06b",
+      "party": "ONKAR MAL SANJAY KUMAR TARANAGAR",
+      "salesman": "rahul",
+      "date": "2026-07-02",
+      "time": "17:43",
+      "status": "Pending",
+      "items": [
+        {
+          "product": "M350",
+          "qty": 1,
+          "rate": 25
+        }
+      ],
+      "createdAt": "2026-07-02T12:13:25.650Z",
+      "deliveredDate": null
+    },
+    {
+      "id": "058536c9-563b-4321-bbb7-9cabd90db933",
+      "party": "TAYAL ENTERPRISES HISAR",
+      "salesman": "rahul",
+      "date": "2026-07-02",
+      "time": "17:42",
+      "status": "Pending",
+      "items": [
+        {
+          "product": "M350",
+          "qty": 4,
+          "rate": 2
+        }
+      ],
+      "createdAt": "2026-07-02T12:12:52.491Z",
+      "deliveredDate": null
+    },
+    {
+      "id": "9fef7996-600a-444e-8cc1-5df156c285d9",
+      "party": "SHIV SHAKTI JIND",
+      "salesman": "rahul",
+      "date": "2026-07-02",
+      "time": "17:31",
+      "status": "Pending",
+      "items": [
+        {
+          "product": "M350",
+          "qty": 5,
+          "rate": 1300
+        }
+      ],
+      "createdAt": "2026-07-02T12:01:21.211Z",
+      "deliveredDate": null
+    },
+    {
+      "id": "91d7fbf7-bb71-48da-92c4-b9b399e7d357",
+      "party": "ONKAR MAL SANJAY KUMAR TARANAGAR",
+      "salesman": "rahul",
+      "date": "2026-07-02",
+      "time": "17:10",
+      "status": "Pending",
+      "items": [
+        {
+          "product": "M350",
+          "qty": 15,
+          "rate": 1388
+        }
+      ],
+      "createdAt": "2026-07-02T11:40:14.513Z",
+      "deliveredDate": null
+    }
+  ],
+  "salesmen": {
+    "rahul": {
+      "username": "rahul",
+      "passwordHash": "2311c309c3229b7d71c57bbd200103e2:306e1d8c011d72e231bede2f4dea3a22b3deb176a00d39cdf8dea5a693dbca1a",
+      "createdAt": "2026-07-02T11:32:00.034Z",
+      "targets": {
+        "categoryTargets": {
+          "OIL": {
+            "qty": 250,
+            "incentive": 500,
+            "deadline": "2026-07-04T18:47"
+          }
+        },
+        "productTargets": {
+          "M350": {
+            "qty": 50,
+            "incentive": 0,
+            "deadline": ""
+          }
+        }
+      }
+    },
+    "rajesh": {
+      "username": "rajesh",
+      "passwordHash": "46f1e10e5f7b14532a3043f08d696954:231e8868d8f5d93c4689039345b1d3420077ad43d7decc199d78ad15dd93eaa4",
+      "createdAt": "2026-07-02T11:32:09.010Z",
+      "targets": {
+        "categoryTargets": {},
+        "productTargets": {}
+      }
+    }
+  },
+  "meta": {
+    "app": "Niharo WMS Pro",
+    "version": "2.0.0",
+    "savedAt": "2026-07-02T13:17:15.119Z"
+  }
+}

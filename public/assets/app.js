@@ -118,7 +118,14 @@ function renderKpis() { const orders = state.orders || []; const pending = order
 function renderCart() { const box = $('cartPreview'); if (!cart.length) { box.innerHTML = '<div class="empty-state" style="padding:16px">Cart empty hai. Item add karein.</div>'; return; } box.innerHTML = cart.map((item, idx) => `<div class="cart-item"><div><b>${escapeHtml(item.product)}</b><div style="color:var(--muted);font-size:13px">${item.qty} pcs × ${money(item.rate)}</div></div><div style="text-align:right"><b>${money(item.qty * item.rate)}</b><br><button class="btn btn-danger btn-sm" onclick="removeCartItem(${idx})">Remove</button></div></div>`).join('') + `<div style="text-align:right;margin-top:10px;font-weight:900">Total: ${money(cart.reduce((s,i)=>s+i.qty*i.rate,0))}</div>`; }
 window.removeCartItem = (idx) => { cart.splice(idx, 1); renderCart(); };
 function orderItemsHtml(order, includeStock = false) { return (order.items || []).map(i => { const avail = Number(state.products?.[i.product]?.available || 0); const shortage = Math.max(0, Number(i.qty || 0) - avail); const status = includeStock ? (shortage ? ` <span class="badge badge-danger">Short ${shortage}</span>` : ` <span class="badge badge-success">Avail ${avail}</span>`) : ''; return `<div class="item-line">• <b>${escapeHtml(i.product)}</b> — ${i.qty} pcs @ ${money(i.rate)}${status}</div>`; }).join(''); }
-function renderRecentOrders() { const rows = (state.orders || []).filter(isPending).slice(0, 8).map(o => `<tr><td><b>${escapeHtml(o.party)}</b><br><span style="color:var(--muted);font-size:12px">${escapeHtml(o.date)} ${escapeHtml(o.time || '')}</span></td><td><span class="badge badge-user">${escapeHtml(String(o.salesman || '').toUpperCase())}</span></td><td>${orderItemsHtml(o, true)}</td><td><b>${money(orderTotal(o))}</b></td><td><span class="badge badge-pending">Pending</span></td></tr>`).join(''); $('recentPendingBody').innerHTML = rows || '<tr><td colspan="5" class="empty-state">No pending orders</td></tr>'; }
+function renderRecentOrders() {
+  const rows = (state.orders || []).filter(isPending).slice(0, 8).map(o => {
+    const expanded = expandedOrders.has(String(o.id));
+    const itemsCell = `<div class="compact-order-cell" onclick="toggleOrderExpand('${o.id}')">${orderCompactHtml(o)}<button class="btn btn-soft btn-sm" type="button">${expanded ? 'Hide items' : 'View items'}</button></div>${expanded ? `<div class="order-expanded">${orderItemsHtml(o, true)}</div>` : ''}`;
+    return `<tr><td><b>${escapeHtml(o.party)}</b><br><span style="color:var(--muted);font-size:12px">${escapeHtml(o.date)} ${escapeHtml(o.time || '')}</span></td><td><span class="badge badge-user">${escapeHtml(String(o.salesman || '').toUpperCase())}</span></td><td>${itemsCell}</td><td><b>${money(orderTotal(o))}</b></td><td><span class="badge badge-pending">Pending</span></td></tr>`;
+  }).join('');
+  $('recentPendingBody').innerHTML = rows || '<tr><td colspan="5" class="empty-state">No pending orders</td></tr>';
+}
 function renderInventory() {
   const catFilter = $('inventoryCategoryFilter') ? $('inventoryCategoryFilter').value || 'ALL' : 'ALL';
   const stockFilter = $('inventoryStockFilter') ? $('inventoryStockFilter').value || 'ALL' : 'ALL';
@@ -166,7 +173,7 @@ function orderCompactHtml(order) {
   const shortText = shortageItems.length ? `<span class="badge badge-danger">${shortageItems.length} short</span>` : '<span class="badge badge-success">Ready</span>';
   return `<div class="order-compact"><b>${items.length} variants</b> · ${qty(totalQty)} pcs ${shortText}<br><span>${topNames}${items.length > 4 ? ' +' + (items.length - 4) + ' more' : ''}</span></div>`;
 }
-window.toggleOrderExpand = (orderId) => { const key = String(orderId); if (expandedOrders.has(key)) expandedOrders.delete(key); else expandedOrders.add(key); renderOrders(); };
+window.toggleOrderExpand = (orderId) => { const key = String(orderId); if (expandedOrders.has(key)) expandedOrders.delete(key); else expandedOrders.add(key); renderRecentOrders(); renderOrders(); };
 function renderOrders() {
   const filterSm = $('filterSalesman').value || 'ALL';
   const filterStatus = $('filterStatus').value || 'Pending';

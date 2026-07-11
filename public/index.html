@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Niharo Warehouse Pro</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/assets/styles.css?v=50">
+</head>
+<body class="auth-locked">
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand-card">
+      <div class="logo-mark">N</div>
+      <div>
+        <div class="brand-title">Niharo WMS Pro</div>
+        <div class="brand-subtitle">Node.js live dashboard</div>
+      </div>
+    </div>
+    <div class="nav-section-label">Workspace</div>
+    <button class="nav-btn active" data-screen="dashboard"><span>🏠</span> Dashboard</button>
+    <button class="nav-btn" data-screen="inventory"><span>📦</span> Inventory</button>
+    <button class="nav-btn" data-screen="vardana"><span>🧰</span> Vardana</button>
+    <button class="nav-btn" data-screen="orders"><span>🧾</span> Orders</button>
+    <button class="nav-btn" data-screen="masters"><span>👥</span> Parties & Salesmen</button>
+    <button class="nav-btn" data-screen="targets"><span>🎯</span> Targets</button>
+    <button class="nav-btn" data-screen="reports"><span>📊</span> MIS Report</button>
+    <button class="nav-btn" data-screen="admin"><span>🛡️</span> Admin Panel</button>
+    <button class="nav-btn" data-screen="settings"><span>⚙️</span> Settings</button>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="page-heading">
+        <h1 id="pageTitle">Warehouse dashboard</h1>
+        <p id="pageSubtitle">Inventory, pending orders, dispatch aur MIS ek jagah.</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn btn-soft drawer-toggle" id="drawerBtn">☰ Menu</button>
+        <div class="search"><span class="icon">🔎</span><input id="globalSearch" placeholder="Search party, product, salesman"></div>
+        <span class="status-pill" id="liveStatus"><span class="status-dot"></span> Connecting</span>
+        <button class="btn btn-blue" id="adminLoginBtn">Warehouse login</button>
+        <button class="btn btn-soft" id="adminLogoutBtn" style="display:none">Logout</button>
+      </div>
+    </div>
+
+    <section class="screen active" id="screen-dashboard">
+      <div class="kpi-grid">
+        <div class="kpi"><div class="label">Products</div><div class="value" id="kpiProducts">0</div><div class="hint">Active SKU master</div></div>
+        <div class="kpi"><div class="label">Pending Orders</div><div class="value" id="kpiPending">0</div><div class="hint">Live order queue</div></div>
+        <div class="kpi"><div class="label">Shortage Items</div><div class="value" id="kpiShortage">0</div><div class="hint">Need stock planning</div></div>
+        <div class="kpi"><div class="label">Business Volume</div><div class="value" id="kpiRevenue">₹0</div><div class="hint">All orders total</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><div><h2>Stock entry</h2><p>Product stock IN / OUT update karein.</p></div></div>
+          <form id="stockForm" class="form-grid">
+            <div class="col-6"><label>Product</label><input id="stockName" list="productSuggestions" placeholder="OIL 700" autocomplete="off" required><datalist id="productSuggestions"></datalist></div>
+            <div class="col-3"><label>Category</label><input id="stockLocation" placeholder="OIL"></div>
+            <div class="col-3"><label id="stockQtyLabel">Qty</label><input id="stockQty" type="number" min="0" step="0.01" placeholder="0" required></div>
+            <div class="col-3" id="stockAltQtyWrap" style="display:none"><label id="stockAltQtyLabel">Alt Qty</label><input id="stockAltQty" type="number" min="0" step="0.01" placeholder="0"></div>
+            <div class="col-3" id="stockConversionNoteWrap" style="display:none"><label>Conversion</label><div id="stockConversionNote" class="input-note">No conversion</div></div>
+            <div class="col-6"><label>Type</label><select id="stockType"><option value="IN">Stock IN (+)</option><option value="OUT">Stock OUT (-)</option></select></div>
+            <button class="btn btn-primary col-6" type="submit">Update stock</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><div><h2>Office order entry</h2><p>Manual order banayein ya WhatsApp format paste karein.</p></div><button class="btn btn-success btn-sm" id="openParserBtn">WhatsApp import</button></div>
+          <form id="orderItemForm" class="form-grid">
+            <div class="col-4"><label>Party</label><select id="orderParty"></select></div>
+            <div class="col-3"><label>Salesman / booked by</label><select id="orderSalesman"><option value="OFFICE ADMIN">OFFICE ADMIN</option></select></div>
+            <div class="col-3"><label>Product</label><select id="orderProduct"></select></div>
+            <div class="col-2"><label id="orderQtyLabel">Qty</label><input id="orderQty" type="number" min="0.01" step="0.01"></div>
+            <div class="col-2" id="orderAltQtyWrap"><label id="orderAltQtyLabel">Alt Qty</label><input id="orderAltQty" type="number" min="0.01" step="0.01"></div>
+            <div class="col-2"><label>Rate</label><input id="orderRate" type="number" min="0" step="0.01"></div>
+            <button class="btn btn-warning col-4" type="submit">Add item</button>
+            <button class="btn btn-primary col-8" type="button" id="submitOfficeOrderBtn">Submit order</button>
+          </form>
+          <div id="cartPreview" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><div><h2>Recent pending orders</h2><p>Newest orders live yahan dikhte rahenge.</p></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Party</th><th>Salesman</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody id="recentPendingBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-inventory">
+      <div class="card">
+        <div class="card-title"><div><h2>Inventory master</h2><p>Available stock aur shortage status.</p></div><div class="table-actions"><button class="btn btn-success btn-sm" id="downloadProductFormatBtn">Product Excel Format</button><button class="btn btn-blue btn-sm" id="importProductsBtn">Import Products</button><input id="productImportFile" type="file" accept=".csv,.xls,.xlsx,.txt" style="display:none"></div></div>
+        <div class="form-grid compact-filter" style="margin-bottom:14px">
+          <div class="col-3"><label>Category filter</label><select id="inventoryCategoryFilter"><option value="ALL">All categories</option></select></div>
+          <div class="col-3"><label>Stock filter</label><select id="inventoryStockFilter"><option value="ALL">All stock</option><option value="POSITIVE">Positive stock</option><option value="ZERO">Zero stock</option><option value="NEGATIVE">Negative stock</option><option value="SHORT">Shortage only</option></select></div>
+          <div class="col-3"><label>Sort</label><select id="inventorySortFilter"><option value="CUSTOM">Custom sequence (drag lock)</option><option value="NAME_ASC">Product A to Z</option><option value="STOCK_DESC">Stock high to low</option><option value="STOCK_ASC">Stock low to high</option><option value="DEMAND_DESC">Pending demand high to low</option><option value="SHORTAGE_DESC">Shortage high to low</option></select></div>
+          <div class="col-3"><label>Summary</label><div class="filter-summary" id="inventorySummary">0 products</div></div>
+        </div>
+        <p class="helper-line">Drag handle se products ko upar-niche karke sequence lock kar sakte ho. Ye sequence Inventory, Orders, Worker Slip, MIS aur exports mein use hoga.</p><div class="table-wrap"><table><thead><tr><th>Seq</th><th>Product</th><th>Category</th><th>Base Unit</th><th>Alt Unit / Conversion</th><th>Available</th><th>Pending demand</th><th>Shortage</th><th>Action</th></tr></thead><tbody id="inventoryBody"></tbody></table></div>
+      </div>
+
+      <div class="card" id="inventoryHistoryCard" style="margin-top:16px">
+        <div class="card-title"><div><h2>Product stock history</h2><p>Date wise opening, stock in, stock out, production aur closing balance.</p></div></div>
+        <div class="form-grid compact-filter" style="margin-bottom:14px">
+          <div class="col-4"><label>Product</label><select id="inventoryHistoryProduct"><option value="">Select product</option></select></div>
+          <div class="col-2"><label>From date</label><input id="inventoryHistoryFrom" type="date"></div>
+          <div class="col-2"><label>To date</label><input id="inventoryHistoryTo" type="date"></div>
+          <div class="col-4"><label>Summary</label><div class="filter-summary" id="inventoryHistorySummary">Product select karo.</div></div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Opening</th><th>In</th><th>Out</th><th>Production</th><th>Closing</th><th>Note</th><th>Ref</th></tr></thead><tbody id="inventoryHistoryBody"></tbody></table></div>
+      </div>
+    </section>
+
+
+    <section class="screen" id="screen-vardana">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><div><h2>Vardana Stock Master</h2><p>Bottle, wrapper, peti, carton aur packing material stock.</p></div></div>
+          <form id="vardanaMaterialForm" class="form-grid">
+            <div class="col-4"><label>Material name</label><input id="vardanaMaterialName" placeholder="350G BOTTLE" required></div>
+            <div class="col-2"><label>Unit</label><select id="vardanaMaterialUnit"><option>PCS</option><option>KG</option><option>BOX</option><option>BAG</option><option>ROLL</option><option>CARTON</option><option>BUNDLE</option></select></div>
+            <div class="col-3"><label>Available stock</label><input id="vardanaMaterialStock" type="number" step="0.01" min="0" placeholder="0" required></div>
+            <div class="col-3"><label>Low alert</label><input id="vardanaMaterialLow" type="number" step="0.01" min="0" placeholder="0"></div>
+            <button class="btn btn-primary col-12" type="submit">Save material stock</button>
+          </form>
+          <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Material</th><th>Unit</th><th>Available</th><th>Low alert</th><th>Status</th><th>Action</th></tr></thead><tbody id="vardanaMaterialsBody"></tbody></table></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><div><h2>Product Recipe / BOM</h2><p>1 finished product unit banane mein kitna vardana lagega.</p></div></div>
+          <form id="vardanaRecipeForm" class="form-grid">
+            <div class="col-6"><label>Finished product</label><select id="vardanaRecipeProduct"></select></div>
+            <div class="col-3"><label>Recipe for qty</label><input id="vardanaRecipeOutputQty" type="number" min="0.01" step="0.01" value="1"></div>
+            <div class="col-3"><label>Finished unit</label><div class="filter-summary" id="vardanaRecipeProductUnit">UNIT</div></div>
+            <div class="col-12"><label>Material lines</label><textarea id="vardanaRecipeLines" placeholder="350G BOTTLE=24&#10;M350 WRAPPER=24&#10;M350 CARTON/PETI=1" style="min-height:110px"></textarea></div>
+            <button class="btn btn-warning col-12" type="submit">Save recipe</button>
+          </form>
+          <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Product</th><th>Recipe</th><th>Action</th></tr></thead><tbody id="vardanaRecipesBody"></tbody></table></div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:18px">
+        <div class="card">
+          <div class="card-title"><div><h2>Production / Stock In</h2><p>Finished stock add karte hi vardana automatic minus hoga.</p></div></div>
+          <form id="vardanaProductionForm" class="form-grid">
+            <div class="col-6"><label>Product ready</label><select id="vardanaProductionProduct"></select></div>
+            <div class="col-3"><label>Quantity ready</label><input id="vardanaProductionQty" type="number" min="0.01" step="0.01" placeholder="0"></div>
+            <div class="col-3"><label>Unit</label><div class="filter-summary" id="vardanaProductionUnit">UNIT</div></div>
+            <button class="btn btn-success col-12" type="submit">Add production & minus vardana</button>
+          </form>
+          <div id="vardanaProductionPreview" style="margin-top:14px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><div><h2>Usage History</h2><p>Production aur material consumption ka record.</p></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Date</th><th>Product</th><th>Qty made</th><th>Material consumed</th><th>Action</th></tr></thead><tbody id="vardanaHistoryBody"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="screen" id="screen-orders">
+      <div class="card">
+        <div class="card-title"><div><h2>Order tracker</h2><p>Pending dispatch aur completed orders.</p></div></div>
+        <div class="form-grid" style="margin-bottom:14px">
+          <div class="col-4"><label>Salesman filter</label><select id="filterSalesman"></select></div>
+          <div class="col-4"><label>Status</label><select id="filterStatus"><option value="Pending">Pending</option><option value="Delivered">Delivered</option><option value="ALL">All</option></select></div>
+          <div class="col-4"><label>Shortage</label><select id="filterShortage"><option value="ALL">All</option><option value="SHORT">Only shortage</option><option value="OK">Ready to deliver</option><option value="ALMOST">Almost ready</option></select></div>
+          <div class="col-4"><label>Allocation mode</label><select id="allocationMode"><option value="SMART">Smart dispatch</option><option value="FIFO">FIFO</option><option value="MANUAL">Manual priority</option></select></div>
+          <div class="col-8"><label>Dispatch summary</label><div class="filter-summary" id="allocationSummary">Ready calculation pending...</div></div>
+          <div class="col-12"><label>Pending items export</label><div class="table-actions"><button class="btn btn-soft btn-sm" id="selectShortageOrdersBtn">Select shortage orders</button><button class="btn btn-soft btn-sm" id="clearDispatchSelectionBtn">Clear selection</button><button class="btn btn-blue btn-sm" id="exportDispatchPdfBtn">Print / PDF</button><button class="btn btn-primary btn-sm" id="exportWorkerSlipBtn">Worker Slip</button><button class="btn btn-warning btn-sm" id="quickProductionSelectedBtn">Quick Production</button><button class="btn btn-soft btn-sm" id="viewQuickProductionBtn">Quick Production History</button><button class="btn btn-success btn-sm" id="exportDispatchXlsBtn">Excel</button><button class="btn btn-warning btn-sm" id="copyDispatchWhatsAppBtn">Copy WhatsApp</button><button class="btn btn-soft btn-sm" id="openDispatchWhatsAppBtn">Open WhatsApp</button></div><div class="hint-line" id="dispatchSelectionInfo">Checkbox tick karoge to sirf selected parties/orders export honge. Export me sirf pending/short items aur total niklega.</div></div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Select</th><th>Party & Date</th><th>Booked By</th><th>Items & Stock</th><th>Total</th><th>Action</th></tr></thead><tbody id="ordersBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-masters">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><div><h2>Parties master</h2><p>Salesman sirf listed parties select kar paayega.</p></div><div class="table-actions"><button class="btn btn-success btn-sm" id="downloadPartyFormatBtn">Party Excel Format</button><button class="btn btn-blue btn-sm" id="importPartiesBtn">Import Parties</button><input id="partyImportFile" type="file" accept=".csv,.xls,.xlsx,.txt" style="display:none"></div></div>
+          <form id="partyForm" class="form-grid"><div class="col-8"><label>Party / shop name</label><input id="partyName" placeholder="Enter party name"></div><button class="btn btn-primary col-4" type="submit">Add party</button></form>
+          <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Party</th><th>Action</th></tr></thead><tbody id="partiesBody"></tbody></table></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><div><h2>Salesmen accounts</h2><p>Phone app login yahin se create hoga.</p></div></div>
+          <form id="salesmanForm" class="form-grid"><div class="col-5"><label>Username</label><input id="salesmanName" placeholder="small letters"></div><div class="col-4"><label>Password</label><input id="salesmanPass" placeholder="password"></div><button class="btn btn-warning col-3" type="submit">Create</button></form>
+          <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Salesman</th><th>Password</th><th>Targets</th><th>Action</th></tr></thead><tbody id="salesmenBody"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="screen" id="screen-targets">
+      <div class="card">
+        <div class="card-title"><div><h2>Target tracker</h2><p>Warehouse/admin yahin se salesman target set karega. Salesman app me sirf view hoga.</p></div></div>
+        <div class="quick-card target-set-card" style="margin-bottom:14px">
+          <div class="target-help-head">
+            <div>
+              <h3 style="margin-bottom:4px">Warehouse se target set karein</h3>
+              <p style="color:var(--muted);font-size:12px;margin:0">Pehle salesman select karo. Neeche dono box alag-alag kaam ke liye hain.</p>
+            </div>
+            <div class="target-note-pill">Salesman sirf dekh sakta hai</div>
+          </div>
+
+          <div class="form-grid" style="margin-top:12px;margin-bottom:14px">
+            <div class="col-4"><label>Salesman select karo</label><select id="targetSetSalesman"><option value="">Select salesman</option></select></div>
+          </div>
+
+          <div class="target-choice-grid">
+            <div class="target-choice-box target-category-box">
+              <div class="target-choice-title"><span>1</span><div><b>Category target</b><small>Example: OIL category ka total target</small></div></div>
+              <div class="form-grid">
+                <div class="col-6"><label>Category</label><select id="targetSetCategorySelect"><option value="">Select category</option></select></div>
+                <div class="col-3"><label>Target qty</label><input id="targetSetCategoryQty" type="number" min="0" placeholder="0"></div>
+                <div class="col-3"><label>Incentive ₹</label><input id="targetSetCategoryIncentive" type="number" min="0" placeholder="0"></div>
+                <div class="col-6"><label>Last date/time</label><input id="targetSetCategoryDeadline" type="datetime-local"></div>
+                <div class="col-6" style="align-self:end"><button class="btn btn-primary" id="saveTargetSetCategoryBtn" type="button" style="width:100%">Category target save karo</button></div>
+              </div>
+            </div>
+
+            <div class="target-choice-box target-product-box">
+              <div class="target-choice-title"><span>2</span><div><b>Specific product target</b><small>Example: M350 par alag extra target</small></div></div>
+              <div class="form-grid">
+                <div class="col-6"><label>Product</label><select id="targetSetProductSelect"><option value="">Select product</option></select></div>
+                <div class="col-3"><label>Target qty</label><input id="targetSetProductQty" type="number" min="0" placeholder="0"></div>
+                <div class="col-3"><label>Incentive ₹</label><input id="targetSetProductIncentive" type="number" min="0" placeholder="0"></div>
+                <div class="col-6"><label>Last date/time</label><input id="targetSetProductDeadline" type="datetime-local"></div>
+                <div class="col-6" style="align-self:end"><button class="btn btn-warning" id="saveTargetSetProductBtn" type="button" style="width:100%">Product target save karo</button></div>
+              </div>
+            </div>
+          </div>
+          <p style="color:var(--muted);font-size:12px;margin-top:12px"><b>Note:</b> Category target poori category ke liye hota hai. Product target kisi ek product ke liye alag se de sakte ho. Incentive aur time dashboard aur salesman app dono par show honge.</p>
+        </div>
+        <div class="form-grid" style="margin-bottom:14px">
+          <div class="col-4"><label>Filter Salesman</label><select id="targetSalesmanFilter"><option value="ALL">All salesmen</option></select></div>
+          <div class="col-4"><label>Filter Category</label><select id="targetCategoryFilter"><option value="ALL">All categories</option></select></div>
+          <div class="col-4"><label>Filter Product</label><select id="targetProductFilter"><option value="ALL">All products</option></select></div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Salesman</th><th>Target Type</th><th>Target</th><th>Completed</th><th>Remaining</th><th>Incentive</th><th>Time left</th><th>Status</th><th>Action</th></tr></thead><tbody id="targetsBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-reports">
+      <div class="card">
+        <div class="card-title"><div><h2>MIS analytics</h2><p>Date, party, product aur salesman filters ke saath report.</p></div><div class="table-actions"><button class="btn btn-success btn-sm" id="exportReportXls">Export XLS</button><button class="btn btn-blue btn-sm" id="exportReportPdf">Export PDF</button><button class="btn btn-soft btn-sm" id="clearReportFilters">Clear filters</button></div></div>
+        <div class="form-grid" style="margin-bottom:14px">
+          <div class="col-2"><label>From</label><input id="reportFrom" type="date"></div>
+          <div class="col-2"><label>To</label><input id="reportTo" type="date"></div>
+          <div class="col-3"><label>Salesman</label><select id="reportSalesman"></select></div>
+          <div class="col-3"><label>Party</label><select id="reportParty"></select></div>
+          <div class="col-2"><label>Product</label><select id="reportProduct"></select></div>
+        </div>
+        <div class="kpi-grid"><div class="kpi"><div class="label">Orders</div><div class="value" id="reportOrderCount">0</div></div><div class="kpi"><div class="label">Total Value</div><div class="value" id="reportTotal">₹0</div></div><div class="kpi"><div class="label">Pending</div><div class="value" id="reportPending">0</div></div><div class="kpi"><div class="label">Delivered</div><div class="value" id="reportDelivered">0</div></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Salesman</th><th>Party</th><th>Items</th><th>Total</th><th>Status</th></tr></thead><tbody id="reportBody"></tbody></table></div>
+      </div>
+    </section>
+
+
+    <section class="screen" id="screen-admin">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><div><h2>Warehouse users</h2><p>User ID, password aur role yahan manage honge. Sirf Owner ko access.</p></div></div>
+          <form id="adminUserForm" class="form-grid">
+            <div class="col-3"><label>User ID</label><input id="adminUserId" placeholder="warehouse1" autocomplete="off"></div>
+            <div class="col-3"><label>Name</label><input id="adminUserName" placeholder="Staff name"></div>
+            <div class="col-3"><label>Password</label><input id="adminUserPassword" type="password" placeholder="New/change password"></div>
+            <div class="col-2"><label>Role</label><select id="adminUserRole"><option>Warehouse</option><option>Sales Manager</option><option>Accounts</option><option>Viewer</option></select></div>
+            <div class="col-1"><label>Active</label><select id="adminUserActive"><option value="true">Yes</option><option value="false">No</option></select></div>
+            <button class="btn btn-primary col-12" type="submit">Save user</button>
+          </form>
+          <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>User ID</th><th>Name</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody id="adminUsersBody"></tbody></table></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><div><h2>Role permissions</h2><p>Kis role ko kaunsa tab/action milega yahan set karein.</p></div></div>
+          <div class="form-grid" style="margin-bottom:14px">
+            <div class="col-6"><label>Role select</label><select id="rolePermissionRole"><option>Warehouse</option><option>Sales Manager</option><option>Accounts</option><option>Viewer</option></select></div>
+            <div class="col-6" style="align-self:end"><button class="btn btn-success" id="saveRolePermissionsBtn" type="button" style="width:100%">Save permissions</button></div>
+          </div>
+          <div class="table-wrap"><table class="perm-table"><thead><tr><th>Module</th><th>View</th><th>Add/Edit</th><th>Delete</th><th>Export</th></tr></thead><tbody id="rolePermissionsBody"></tbody></table></div>
+          <p class="small-note"><b>Note:</b> Owner/admin ko hamesha full access rahega. Admin Panel sirf Owner ko dikhega.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-settings">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><div><h2>Backup & restore</h2><p>Data server ke JSON backend me save hota hai.</p></div></div>
+          <div class="form-grid">
+            <button class="btn btn-blue col-6" id="exportBtn">Export backup</button>
+            <label class="btn btn-soft col-6" style="margin:0"><input type="file" id="importFile" accept="application/json" style="display:none">Import backup</label>
+            <button class="btn btn-danger col-12" id="resetBtn">Reset full database including salesmen</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><div><h2>Phone web app</h2><p>APK ki jagah professional browser/PWA app.</p></div></div>
+          <p style="color:var(--muted); line-height:1.6">Phone me open karein: <b id="salesmanUrlFull"></b><br>Chrome menu se <b>Add to Home screen</b> kar sakte hain.</p>
+          <a href="/salesman" target="_blank" class="btn btn-primary" style="text-decoration:none">Open salesman web app</a>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="loginModal">
+  <div class="modal">
+    <h3>Warehouse login</h3>
+    <p>User ID aur password enter karein. Bina login ke warehouse data show nahi hoga.</p>
+    <label>User ID</label><input id="adminUser" type="text" placeholder="User ID" autocomplete="username">
+    <label>Password</label><input id="adminPassword" type="password" placeholder="Password" autocomplete="current-password">
+    <div class="modal-actions"><button class="btn btn-soft" id="closeLoginBtn">Cancel</button><button class="btn btn-primary" id="doLoginBtn">Login</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="parserModal">
+  <div class="modal">
+    <h3>WhatsApp order import</h3>
+    <p>Format example: Party name, then item lines like <b>OIL700=15=1439</b></p>
+    <textarea id="parserText" placeholder="Ram Ram ji&#10;Brijmohan Choudhary&#10;OIL700=15=1439&#10;OIL900=3=1839"></textarea>
+    <div id="parserPreview" style="margin-top:12px"></div>
+    <div class="modal-actions"><button class="btn btn-soft" id="closeParserBtn">Cancel</button><button class="btn btn-blue" id="parseBtn">Parse</button><button class="btn btn-primary" id="importParsedBtn" style="display:none">Import to cart</button></div>
+  </div>
+</div>
+
+
+<div class="modal-backdrop" id="targetModal">
+  <div class="modal">
+    <h3>Salesman target set karein</h3>
+    <p id="targetModalUser" style="color:var(--muted)"></p>
+    <div class="form-grid">
+      <div class="col-6"><label>Category</label><select id="targetCategorySelect"></select></div>
+      <div class="col-4"><label>Category target qty</label><input id="targetCategoryQty" type="number" min="0" placeholder="0"></div>
+      <button class="btn btn-primary col-2" id="saveCategoryTargetBtn" type="button">Save</button>
+      <div class="col-6"><label>Specific product</label><select id="targetProductSelect"></select></div>
+      <div class="col-4"><label>Product extra target qty</label><input id="targetProductQty" type="number" min="0" placeholder="0"></div>
+      <button class="btn btn-warning col-2" id="saveProductTargetBtn" type="button">Save</button>
+    </div>
+    <div id="targetExistingList" style="margin-top:12px"></div>
+    <div class="modal-actions"><button class="btn btn-soft" id="closeTargetModalBtn">Close</button></div>
+  </div>
+</div>
+
+
+<div class="modal-backdrop" id="quickProductionModal">
+  <div class="modal modal-wide">
+    <h3>Quick Production History</h3>
+    <p>Yahan selected pending orders ke liye jo quick production stock add hua hai, uska record dikh raha hai.</p>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Items added</th><th>Selected orders</th><th>Note</th></tr></thead><tbody id="quickProductionHistoryBody"></tbody></table></div>
+    <div class="modal-actions"><button class="btn btn-soft" id="closeQuickProductionBtn">Close</button></div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+<script src="/assets/app.js?v=53"></script>
+</body>
+</html>

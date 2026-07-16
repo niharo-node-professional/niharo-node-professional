@@ -524,3 +524,4 @@ td:first-child, th:first-child { width: 72px; }
 .qp-party-list { display:flex; flex-direction:column; gap:4px; }
 .qp-party { font-weight:800; color:#10201b; }
 @media (max-width: 720px) { .modal-head { flex-direction:column; } .modal-head .btn { width:100%; } }
+.qp-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 6px; }

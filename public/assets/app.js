@@ -787,9 +787,27 @@ function quickProductionOpenRows(h) {
   });
   return Object.values(map).sort((a,b)=>String(a.category).localeCompare(String(b.category)) || compareProductsBySequence(a.product,b.product));
 }
-function renderQuickProductionItems(h, openRows) {
-  const source = Array.isArray(openRows) ? openRows : quickProductionOpenRows(h);
-  if (!source.length) return '<span class="muted">Complete / no current requirement</span>';
+let quickProductionHistoryMode = 'active';
+function quickProductionAllRows(h) {
+  if (!h) return [];
+  const source = Array.isArray(h.pendingItems) && h.pendingItems.length ? h.pendingItems : (Array.isArray(h.items) ? h.items : []);
+  const map = {};
+  source.forEach(i => {
+    const product = String(i.product || '').trim();
+    const q = Math.max(0, Number(i.qty || 0));
+    if (!product || q <= 0) return;
+    const unit = i.unit || productUnit(product);
+    const category = i.category || productCategory(product) || 'MAIN';
+    const key = category + '||' + product + '||' + unit;
+    if (!map[key]) map[key] = { category, product, unit, qty: 0, parties: new Set() };
+    map[key].qty += q;
+    (Array.isArray(i.parties) ? i.parties : []).forEach(p => p && map[key].parties.add(String(p)));
+  });
+  return Object.values(map).sort((a,b)=>String(a.category).localeCompare(String(b.category)) || compareProductsBySequence(a.product,b.product));
+}
+function renderQuickProductionItems(h, rows, emptyText) {
+  const source = Array.isArray(rows) ? rows : quickProductionOpenRows(h);
+  if (!source.length) return `<span class="muted">${escapeHtml(emptyText || 'Complete / no current requirement')}</span>`;
   const grouped = {};
   source.forEach(i => {
     const cat = String(i.category || productCategory(i.product) || 'MAIN');
@@ -797,41 +815,63 @@ function renderQuickProductionItems(h, openRows) {
     grouped[cat].push(i);
   });
   return `<div class="qp-items">${Object.keys(grouped).sort((a,b)=>a.localeCompare(b)).map(cat => {
-    const rows = grouped[cat].slice().sort((a,b)=>compareProductsBySequence(a.product,b.product)).map(i => {
+    const rowsHtml = grouped[cat].slice().sort((a,b)=>compareProductsBySequence(a.product,b.product)).map(i => {
       const parties = i.parties instanceof Set ? Array.from(i.parties).filter(Boolean) : (Array.isArray(i.parties) ? i.parties : []);
       const partiesLine = parties.length ? `<div class="qp-item-sub">Party: ${escapeHtml(parties.join(', '))}</div>` : '';
       return `<div class="qp-item"><div class="qp-item-main">${escapeHtml(i.product)} — ${qty(i.qty)} ${escapeHtml(i.unit || productUnit(i.product))}</div>${partiesLine}</div>`;
     }).join('');
-    return `<div><div class="muted" style="font-weight:900;margin:4px 0">${escapeHtml(cat)}</div>${rows}</div>`;
+    return `<div><div class="muted" style="font-weight:900;margin:4px 0">${escapeHtml(cat)}</div>${rowsHtml}</div>`;
   }).join('')}</div>`;
 }
 function renderQuickProductionOrders(h) {
   const ids = quickProductionOrderIds(h);
   const ordersFromState = (state.orders || []).filter(o => ids.has(String(o.id)));
-  if (ordersFromState.length) return `<div class="qp-party-list">${ordersFromState.map(o => `<div class="qp-party">${escapeHtml(o.party || '-')}</div><div class="muted">${escapeHtml(o.salesman || o.bookedBy || '')} ${escapeHtml(o.priority ? '· '+o.priority : '')} ${isDelivered(o) ? '· Delivered' : ''}</div>`).join('')}</div>`;
+  if (ordersFromState.length) return `<div class="qp-party-list">${ordersFromState.map(o => `<div class="qp-party">${escapeHtml(o.party || '-')}</div><div class="muted">${escapeHtml(o.salesman || o.bookedBy || '')} ${escapeHtml(o.priority ? '· '+o.priority : '')} ${isDelivered(o) ? '· Delivered' : '· Pending'}</div>`).join('')}</div>`;
   const orders = Array.isArray(h.selectedOrders) ? h.selectedOrders : [];
   if (orders.length) return `<div class="qp-party-list">${orders.map(o => `<div class="qp-party">${escapeHtml(o.party || '-')}</div><div class="muted">${escapeHtml(o.salesman || '')} ${escapeHtml(o.priority ? '· '+o.priority : '')}</div>`).join('')}</div>`;
   return '<span class="muted">Old entry / order link not found</span>';
 }
-
+function quickProductionStatusHtml(h, openRows) {
+  if (h.reversed || h.adjusted) return `<span class="badge badge-light">Reversed</span><br><span class="muted">${escapeHtml(h.reverseNote || h.reversedAt || 'Reversed')}</span>`;
+  if (quickProductionHistoryMode === 'active') return `<span class="badge warn">Need stock in</span><br><span class="muted">${qty(openRows.reduce((s,r)=>s+Number(r.qty||0),0))} total pending</span>`;
+  const ids = quickProductionOrderIds(h);
+  const linked = (state.orders || []).filter(o => ids.has(String(o.id)));
+  if (linked.length && linked.every(isDelivered)) return '<span class="badge badge-delivered">Delivered</span>';
+  if (linked.length && linked.some(isPending)) return '<span class="badge warn">Pending order</span>';
+  return '<span class="badge badge-user">Active</span>';
+}
 function renderQuickProductionHistory() {
   const body = $('quickProductionHistoryBody');
   if (!body) return;
-  const allRows = Array.isArray(state.quickProductions) ? state.quickProductions.slice(0, 200) : [];
-  const visible = allRows.map(h => ({ h, openRows: quickProductionOpenRows(h) })).filter(x => x.openRows.length > 0);
-  body.innerHTML = visible.map(({h, openRows}) => {
-    const items = renderQuickProductionItems(h, openRows);
+  const activeBtn = $('qpActiveTabBtn');
+  const allBtn = $('qpAllTabBtn');
+  if (activeBtn) activeBtn.className = quickProductionHistoryMode === 'active' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
+  if (allBtn) allBtn.className = quickProductionHistoryMode === 'all' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
+  const hint = $('qpHistoryHint');
+  if (hint) hint.textContent = quickProductionHistoryMode === 'active' ? 'Active Requirement mein sirf jo abhi bhi stock maang raha hai woh dikhega.' : 'All History mein delivered, active aur reversed quick production sab record dikhega.';
+  const allRows = Array.isArray(state.quickProductions) ? state.quickProductions.slice(0, 300) : [];
+  const visible = allRows.map(h => ({ h, openRows: quickProductionOpenRows(h), allItems: quickProductionAllRows(h) }))
+    .filter(x => quickProductionHistoryMode === 'all' ? x.allItems.length > 0 : x.openRows.length > 0);
+  body.innerHTML = visible.map(({h, openRows, allItems}) => {
+    const rows = quickProductionHistoryMode === 'all' ? allItems : openRows;
+    const items = renderQuickProductionItems(h, rows, quickProductionHistoryMode === 'all' ? 'No item detail found' : 'Complete / no current requirement');
     const orders = renderQuickProductionOrders(h);
     const modeText = h.mode ? `<br><span class="muted">${escapeHtml(h.mode === 'PRIORITY_COVER' ? 'Priority cover' : 'Selected only')}</span>` : '';
-    const status = `<span class="badge warn">Need stock in</span><br><span class="muted">${qty(openRows.reduce((s,r)=>s+Number(r.qty||0),0))} total pending</span>`;
-    const action = `<button class="btn btn-danger btn-sm" onclick="reverseQuickProduction('${escapeHtml(h.id || '')}')">Reverse</button>`;
+    const status = quickProductionStatusHtml(h, openRows);
+    const canReverse = !(h.reversed || h.adjusted);
+    const action = canReverse ? `<button class="btn btn-danger btn-sm" onclick="reverseQuickProduction('${escapeHtml(h.id || '')}')">Reverse</button>` : '-';
     return `<tr><td><b>${escapeHtml(h.date || '')}</b><br><span class="muted">${escapeHtml(h.time || '')}</span>${modeText}</td><td>${items}</td><td>${orders}</td><td>${escapeHtml(h.note || '')}</td><td>${status}</td><td>${action}</td></tr>`;
-  }).join('') || '<tr><td colspan="6" class="empty-state">Abhi koi active quick-production requirement nahi hai. Jo order complete/delivered ho gaya hai woh yahan hide ho jayega.</td></tr>';
+  }).join('') || `<tr><td colspan="6" class="empty-state">${quickProductionHistoryMode === 'active' ? 'Abhi koi active quick-production requirement nahi hai. All History tab mein purana record dekh sakte ho.' : 'Abhi koi quick production history nahi hai.'}</td></tr>`;
+}
+function setQuickProductionHistoryMode(mode) {
+  quickProductionHistoryMode = mode === 'all' ? 'all' : 'active';
+  renderQuickProductionHistory();
 }
 function openQuickProductionHistory() {
   renderQuickProductionHistory();
   if ($('quickProductionModal')) $('quickProductionModal').classList.add('show');
 }
+window.setQuickProductionHistoryMode = setQuickProductionHistoryMode;
 async function reverseQuickProduction(id) {
   if (!id) return;
   if (!requirePerm('inventory','edit')) return;
@@ -1924,7 +1964,7 @@ function initEvents() {
   $('openParserBtn').addEventListener('click', () => { if (!requirePerm('orders','edit')) return; $('parserModal').classList.add('show'); $('parserPreview').innerHTML = ''; $('importParsedBtn').style.display = 'none'; parsedOrder = null; }); $('closeParserBtn').addEventListener('click', () => $('parserModal').classList.remove('show')); $('parseBtn').addEventListener('click', () => { parsedOrder = parseWhatsApp($('parserText').value); if (!parsedOrder.items.length) return toast('Valid item lines nahi mili', 'error'); $('parserPreview').innerHTML = `<div class="card" style="box-shadow:none"><b>Party:</b> ${escapeHtml(parsedOrder.party || 'Not found')}<br><br>${parsedOrder.items.map(i => `• ${escapeHtml(i.product)} — ${qty(i.qty)} ${escapeHtml(productUnit(i.product))} @ ${money(i.rate)}`).join('<br>')}</div>`; $('importParsedBtn').style.display = ''; }); $('importParsedBtn').addEventListener('click', async () => { if (!parsedOrder) return; if (parsedOrder.party && !state.parties.includes(parsedOrder.party)) { if (confirm(`Party "${parsedOrder.party}" listed nahi hai. Add karein?`)) { try { const data = await api('/api/parties', { method: 'POST', body: { name: parsedOrder.party } }); state = normalizeState(data.state || data.data); } catch(e) { toast(e.message, 'error'); return; } } else return; } $('orderParty').value = parsedOrder.party; cart = parsedOrder.items; renderCart(); $('parserModal').classList.remove('show'); toast('Imported to cart', 'success'); });
   $('exportBtn').addEventListener('click', async () => { if (!requirePerm('settings','export')) return; try { const data = await api('/api/export'); const blob = new Blob([JSON.stringify(data.store || data.data || data.state, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'niharo-backup-' + new Date().toISOString().slice(0,10) + '.json'; a.click(); URL.revokeObjectURL(a.href); } catch(e) { toast(e.message, 'error'); } });
   $('importFile').addEventListener('change', async e => { if (!requirePerm('settings','edit')) return; const file = e.target.files[0]; if (!file) return; if (!confirm('Backup import karne se current data replace ho sakta hai. Continue?')) return; try { const raw = JSON.parse(await file.text()); const data = await api('/api/import', { method: 'POST', body: raw }); state = normalizeState(data.state || data.data); renderAll(); toast('Backup imported', 'success'); } catch(err) { toast(err.message, 'error'); } e.target.value = ''; });
-  if ($('adminUserForm')) $('adminUserForm').addEventListener('submit', saveAdminUser); if ($('rolePermissionRole')) $('rolePermissionRole').addEventListener('change', renderRolePermissions); if ($('saveRolePermissionsBtn')) $('saveRolePermissionsBtn').addEventListener('click', saveRolePermissions); if ($('allocationMode')) { $('allocationMode').value = localStorage.getItem('niharo_allocation_mode') || 'SMART'; $('allocationMode').addEventListener('change', () => { localStorage.setItem('niharo_allocation_mode', $('allocationMode').value); renderRecentOrders(); renderOrders(); }); } if ($('selectShortageOrdersBtn')) $('selectShortageOrdersBtn').addEventListener('click', () => window.selectShortageOrders()); if ($('clearDispatchSelectionBtn')) $('clearDispatchSelectionBtn').addEventListener('click', () => window.clearDispatchSelection()); if ($('exportDispatchPdfBtn')) $('exportDispatchPdfBtn').addEventListener('click', exportDispatchPdf); if ($('exportWorkerSlipBtn')) $('exportWorkerSlipBtn').addEventListener('click', exportWorkerSlipPdf); if ($('quickProductionSelectedBtn')) $('quickProductionSelectedBtn').addEventListener('click', quickProductionForSelectedOrders); if ($('viewQuickProductionBtn')) $('viewQuickProductionBtn').addEventListener('click', openQuickProductionHistory); if ($('closeQuickProductionBtn')) $('closeQuickProductionBtn').addEventListener('click', () => $('quickProductionModal')?.classList.remove('show')); if ($('exportDispatchXlsBtn')) $('exportDispatchXlsBtn').addEventListener('click', exportDispatchXls); if ($('copyDispatchWhatsAppBtn')) $('copyDispatchWhatsAppBtn').addEventListener('click', copyDispatchWhatsApp); if ($('openDispatchWhatsAppBtn')) $('openDispatchWhatsAppBtn').addEventListener('click', openDispatchWhatsApp);
+  if ($('adminUserForm')) $('adminUserForm').addEventListener('submit', saveAdminUser); if ($('rolePermissionRole')) $('rolePermissionRole').addEventListener('change', renderRolePermissions); if ($('saveRolePermissionsBtn')) $('saveRolePermissionsBtn').addEventListener('click', saveRolePermissions); if ($('allocationMode')) { $('allocationMode').value = localStorage.getItem('niharo_allocation_mode') || 'SMART'; $('allocationMode').addEventListener('change', () => { localStorage.setItem('niharo_allocation_mode', $('allocationMode').value); renderRecentOrders(); renderOrders(); }); } if ($('selectShortageOrdersBtn')) $('selectShortageOrdersBtn').addEventListener('click', () => window.selectShortageOrders()); if ($('clearDispatchSelectionBtn')) $('clearDispatchSelectionBtn').addEventListener('click', () => window.clearDispatchSelection()); if ($('exportDispatchPdfBtn')) $('exportDispatchPdfBtn').addEventListener('click', exportDispatchPdf); if ($('exportWorkerSlipBtn')) $('exportWorkerSlipBtn').addEventListener('click', exportWorkerSlipPdf); if ($('quickProductionSelectedBtn')) $('quickProductionSelectedBtn').addEventListener('click', quickProductionForSelectedOrders); if ($('viewQuickProductionBtn')) $('viewQuickProductionBtn').addEventListener('click', openQuickProductionHistory); if ($('qpActiveTabBtn')) $('qpActiveTabBtn').addEventListener('click', () => setQuickProductionHistoryMode('active')); if ($('qpAllTabBtn')) $('qpAllTabBtn').addEventListener('click', () => setQuickProductionHistoryMode('all')); if ($('closeQuickProductionBtn')) $('closeQuickProductionBtn').addEventListener('click', () => $('quickProductionModal')?.classList.remove('show')); if ($('exportDispatchXlsBtn')) $('exportDispatchXlsBtn').addEventListener('click', exportDispatchXls); if ($('copyDispatchWhatsAppBtn')) $('copyDispatchWhatsAppBtn').addEventListener('click', copyDispatchWhatsApp); if ($('openDispatchWhatsAppBtn')) $('openDispatchWhatsAppBtn').addEventListener('click', openDispatchWhatsApp);
   $('resetBtn').addEventListener('click', async () => { if (!requirePerm('settings','delete')) return; const val = prompt('Full reset ke liye DELETE type karein'); if (val !== 'DELETE') return; try { const data = await api('/api/reset', { method: 'POST', body: { confirm: 'DELETE' } }); state = normalizeState(data.state || data.data); renderAll(); toast('Database reset', 'success'); } catch(e) { toast(e.message, 'error'); } });
 }
 updateAuthLock();

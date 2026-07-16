@@ -607,7 +607,22 @@ function normalizeQuickProductions(entries, ledger) {
       time: String(e.time || '').slice(0,5),
       createdAt: e.createdAt || `${String(e.date || '')}T${String(e.time || '00:00')}:00`,
       orderIds: Array.isArray(e.orderIds) ? e.orderIds.map(x => String(x)) : [],
+      selectedOrders: Array.isArray(e.selectedOrders) ? e.selectedOrders.map(o => ({
+        id: String(o.id || ''),
+        party: String(o.party || ''),
+        salesman: String(o.salesman || o.bookedBy || ''),
+        date: String(o.date || ''),
+        priority: String(o.priority || '')
+      })) : [],
+      mode: String(e.mode || ''),
       note: String(e.note || ''),
+      pendingItems: Array.isArray(e.pendingItems) ? e.pendingItems.map(i => ({
+        product: productName(i.product),
+        qty: Math.max(0, Number(i.qty || 0)),
+        unit: productUnit(i.unit || 'PCS'),
+        category: productName(i.category || 'MAIN') || 'MAIN',
+        parties: Array.isArray(i.parties) ? i.parties.map(p => String(p)).filter(Boolean) : []
+      })).filter(i => i.product && i.qty > 0) : [],
       items: Array.isArray(e.items) ? e.items.map(i => ({
         product: productName(i.product),
         qty: Math.max(0, Number(i.qty || 0)),
@@ -631,7 +646,7 @@ function normalizeQuickProductions(entries, ledger) {
     if (type !== 'QUICK_PRODUCTION' || seen.has(refId)) continue;
     const q = Math.max(0, Number(r.qty || 0));
     if (q <= 0) continue;
-    if (!group[refId]) group[refId] = { id: refId, date: r.date || '', time: r.time || '', createdAt: r.createdAt || '', orderIds: [], note: r.note || '', items: [] };
+    if (!group[refId]) group[refId] = { id: refId, date: r.date || '', time: r.time || '', createdAt: r.createdAt || '', orderIds: [], selectedOrders: [], mode: '', note: r.note || '', pendingItems: [], items: [] };
     group[refId].items.push({ product: productName(r.product), qty: q, unit: productUnit(r.unit || 'PCS'), opening: Number(r.opening || 0), closing: Number(r.closing || 0) });
     if (!group[refId].createdAt || String(r.createdAt || '') < String(group[refId].createdAt || '')) {
       group[refId].date = r.date || group[refId].date;
@@ -893,6 +908,21 @@ async function handleApi(req, res, url) {
     const b = await body(req);
     const items = Array.isArray(b.items) ? b.items : [];
     const orderIds = Array.isArray(b.orderIds) ? b.orderIds.map(x => String(x)) : [];
+    const selectedOrders = Array.isArray(b.selectedOrders) ? b.selectedOrders.map(o => ({
+      id: String(o.id || ''),
+      party: String(o.party || ''),
+      salesman: String(o.salesman || o.bookedBy || ''),
+      date: String(o.date || ''),
+      priority: String(o.priority || '')
+    })) : [];
+    const pendingItems = Array.isArray(b.pendingItems) ? b.pendingItems.map(i => ({
+      product: productName(i.product),
+      qty: Math.max(0, Number(i.qty || 0)),
+      unit: productUnit(i.unit || 'PCS'),
+      category: productName(i.category || 'MAIN') || 'MAIN',
+      parties: Array.isArray(i.parties) ? i.parties.map(p => String(p)).filter(Boolean) : []
+    })).filter(i => i.product && i.qty > 0) : [];
+    const mode = String(b.mode || 'SELECTED_ONLY').toUpperCase();
     const note = String(b.note || 'Quick production from selected pending orders').trim();
     if (!items.length) return bad(res, 'Quick production ke liye pending item list required');
     const clean = [];
@@ -920,7 +950,7 @@ async function handleApi(req, res, url) {
         addStockLedger(store, row.product, 'QUICK_PRODUCTION', row.qty, opening, closing, note, batchId);
         details.push({ product: row.product, qty: row.qty, unit: store.products[row.product].unit, opening, closing });
       }
-      store.quickProductions.unshift({ id: batchId, date: t.date, time: t.time, createdAt: t.iso, orderIds, note, items: details, adjusted: false });
+      store.quickProductions.unshift({ id: batchId, date: t.date, time: t.time, createdAt: t.iso, orderIds, selectedOrders, pendingItems, mode, note, items: details, adjusted: false });
       if (store.quickProductions.length > 1000) store.quickProductions = store.quickProductions.slice(0, 1000);
     });
     return okState(res);

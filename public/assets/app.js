@@ -755,9 +755,41 @@ function buildQuickProductionSnapshot(rows, mode) {
     }))
   };
 }
-function renderQuickProductionItems(h) {
-  const source = Array.isArray(h.pendingItems) && h.pendingItems.length ? h.pendingItems : (Array.isArray(h.items) ? h.items : []);
-  if (!source.length) return '-';
+function quickProductionOrderIds(h) {
+  const ids = new Set();
+  (Array.isArray(h.orderIds) ? h.orderIds : []).forEach(id => { if (id) ids.add(String(id)); });
+  (Array.isArray(h.selectedOrders) ? h.selectedOrders : []).forEach(o => { if (o && o.id) ids.add(String(o.id)); });
+  return ids;
+}
+function quickProductionOpenRows(h) {
+  if (!h || h.reversed || h.adjusted) return [];
+  const ids = quickProductionOrderIds(h);
+  if (!ids.size) return [];
+  const allocation = buildAllocation(currentAllocationMode());
+  const map = {};
+  (state.orders || []).filter(o => ids.has(String(o.id)) && isPending(o)).forEach(order => {
+    const rec = allocation[order.id];
+    if (!rec || !rec.items) return;
+    (order.items || []).forEach(item => {
+      const product = String(item.product || '').trim();
+      if (!product) return;
+      const row = rec.items[product] || {};
+      const short = Number(row.short || 0);
+      if (short <= 0) return;
+      const unit = productUnit(product);
+      const category = productCategory(product);
+      const key = category + '||' + product + '||' + unit;
+      if (!map[key]) map[key] = { category, product, unit, qty: 0, parties: new Set(), orders: new Set() };
+      map[key].qty += short;
+      map[key].parties.add(String(order.party || ''));
+      map[key].orders.add(String(order.id || ''));
+    });
+  });
+  return Object.values(map).sort((a,b)=>String(a.category).localeCompare(String(b.category)) || compareProductsBySequence(a.product,b.product));
+}
+function renderQuickProductionItems(h, openRows) {
+  const source = Array.isArray(openRows) ? openRows : quickProductionOpenRows(h);
+  if (!source.length) return '<span class="muted">Complete / no current requirement</span>';
   const grouped = {};
   source.forEach(i => {
     const cat = String(i.category || productCategory(i.product) || 'MAIN');
@@ -766,34 +798,35 @@ function renderQuickProductionItems(h) {
   });
   return `<div class="qp-items">${Object.keys(grouped).sort((a,b)=>a.localeCompare(b)).map(cat => {
     const rows = grouped[cat].slice().sort((a,b)=>compareProductsBySequence(a.product,b.product)).map(i => {
-      const parties = Array.isArray(i.parties) && i.parties.length ? `<div class="qp-item-sub">Party: ${escapeHtml(i.parties.join(', '))}</div>` : '';
-      return `<div class="qp-item"><div class="qp-item-main">${escapeHtml(i.product)} — ${qty(i.qty)} ${escapeHtml(i.unit || productUnit(i.product))}</div>${parties}</div>`;
+      const parties = i.parties instanceof Set ? Array.from(i.parties).filter(Boolean) : (Array.isArray(i.parties) ? i.parties : []);
+      const partiesLine = parties.length ? `<div class="qp-item-sub">Party: ${escapeHtml(parties.join(', '))}</div>` : '';
+      return `<div class="qp-item"><div class="qp-item-main">${escapeHtml(i.product)} — ${qty(i.qty)} ${escapeHtml(i.unit || productUnit(i.product))}</div>${partiesLine}</div>`;
     }).join('');
     return `<div><div class="muted" style="font-weight:900;margin:4px 0">${escapeHtml(cat)}</div>${rows}</div>`;
   }).join('')}</div>`;
 }
 function renderQuickProductionOrders(h) {
+  const ids = quickProductionOrderIds(h);
+  const ordersFromState = (state.orders || []).filter(o => ids.has(String(o.id)));
+  if (ordersFromState.length) return `<div class="qp-party-list">${ordersFromState.map(o => `<div class="qp-party">${escapeHtml(o.party || '-')}</div><div class="muted">${escapeHtml(o.salesman || o.bookedBy || '')} ${escapeHtml(o.priority ? '· '+o.priority : '')} ${isDelivered(o) ? '· Delivered' : ''}</div>`).join('')}</div>`;
   const orders = Array.isArray(h.selectedOrders) ? h.selectedOrders : [];
   if (orders.length) return `<div class="qp-party-list">${orders.map(o => `<div class="qp-party">${escapeHtml(o.party || '-')}</div><div class="muted">${escapeHtml(o.salesman || '')} ${escapeHtml(o.priority ? '· '+o.priority : '')}</div>`).join('')}</div>`;
-  const partySet = new Set();
-  (Array.isArray(h.pendingItems) ? h.pendingItems : []).forEach(i => (i.parties || []).forEach(p => partySet.add(String(p))));
-  if (partySet.size) return Array.from(partySet).map(p => `<div class="qp-party">${escapeHtml(p)}</div>`).join('');
-  return '-';
+  return '<span class="muted">Old entry / order link not found</span>';
 }
 
 function renderQuickProductionHistory() {
   const body = $('quickProductionHistoryBody');
   if (!body) return;
-  const rows = Array.isArray(state.quickProductions) ? state.quickProductions.slice(0, 120) : [];
-  body.innerHTML = rows.map(h => {
-    const items = renderQuickProductionItems(h);
+  const allRows = Array.isArray(state.quickProductions) ? state.quickProductions.slice(0, 200) : [];
+  const visible = allRows.map(h => ({ h, openRows: quickProductionOpenRows(h) })).filter(x => x.openRows.length > 0);
+  body.innerHTML = visible.map(({h, openRows}) => {
+    const items = renderQuickProductionItems(h, openRows);
     const orders = renderQuickProductionOrders(h);
-    const reversed = h.reversed || h.adjusted;
     const modeText = h.mode ? `<br><span class="muted">${escapeHtml(h.mode === 'PRIORITY_COVER' ? 'Priority cover' : 'Selected only')}</span>` : '';
-    const status = reversed ? `<span class="badge bad">Reversed</span><br><span class="muted">${escapeHtml(h.reversedAt || '')}</span>` : `<span class="badge ok">Active</span>`;
-    const action = reversed ? '-' : `<button class="btn btn-danger btn-sm" onclick="reverseQuickProduction('${escapeHtml(h.id || '')}')">Reverse</button>`;
+    const status = `<span class="badge warn">Need stock in</span><br><span class="muted">${qty(openRows.reduce((s,r)=>s+Number(r.qty||0),0))} total pending</span>`;
+    const action = `<button class="btn btn-danger btn-sm" onclick="reverseQuickProduction('${escapeHtml(h.id || '')}')">Reverse</button>`;
     return `<tr><td><b>${escapeHtml(h.date || '')}</b><br><span class="muted">${escapeHtml(h.time || '')}</span>${modeText}</td><td>${items}</td><td>${orders}</td><td>${escapeHtml(h.note || '')}</td><td>${status}</td><td>${action}</td></tr>`;
-  }).join('') || '<tr><td colspan="6" class="empty-state">Abhi quick production entry nahi hai.</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="empty-state">Abhi koi active quick-production requirement nahi hai. Jo order complete/delivered ho gaya hai woh yahan hide ho jayega.</td></tr>';
 }
 function openQuickProductionHistory() {
   renderQuickProductionHistory();

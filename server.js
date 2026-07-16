@@ -314,6 +314,74 @@ function addStockLedger(store, product, type, qtyChange, opening, closing, note,
   if (store.stockLedger.length > 10000) store.stockLedger = store.stockLedger.slice(0, 10000);
 }
 
+
+function quickProductionOutstandingByRef(store) {
+  const ledger = Array.isArray(store.stockLedger) ? store.stockLedger : [];
+  const refs = {};
+  for (const r of ledger.slice().reverse()) {
+    const type = String(r.type || '').toUpperCase();
+    const refId = String(r.refId || '').trim();
+    const product = productName(r.product);
+    if (!refId || !product) continue;
+    if (type === 'QUICK_PRODUCTION') {
+      if (!refs[refId]) refs[refId] = { id: refId, products: {} };
+      const unit = productUnit(r.unit || (store.products?.[product]?.unit) || 'PCS');
+      if (!refs[refId].products[product]) refs[refId].products[product] = { product, unit, qty: 0, adjusted: 0, reversed: 0 };
+      refs[refId].products[product].qty += Math.max(0, Number(r.qty || 0));
+    } else if (type === 'QUICK_PRODUCTION_ADJUST') {
+      if (!refs[refId]) refs[refId] = { id: refId, products: {} };
+      const unit = productUnit(r.unit || (store.products?.[product]?.unit) || 'PCS');
+      if (!refs[refId].products[product]) refs[refId].products[product] = { product, unit, qty: 0, adjusted: 0, reversed: 0 };
+      refs[refId].products[product].adjusted += Math.max(0, Number(r.qty || 0));
+    } else if (type === 'QUICK_PRODUCTION_REVERSE') {
+      if (!refs[refId]) refs[refId] = { id: refId, products: {} };
+      const unit = productUnit(r.unit || (store.products?.[product]?.unit) || 'PCS');
+      if (!refs[refId].products[product]) refs[refId].products[product] = { product, unit, qty: 0, adjusted: 0, reversed: 0 };
+      refs[refId].products[product].reversed += Math.abs(Number(r.qty || 0));
+    }
+  }
+  return refs;
+}
+
+function activeQuickProductionItems(store, refId) {
+  const refs = quickProductionOutstandingByRef(store);
+  const rec = refs[String(refId || '')];
+  if (!rec) return [];
+  return Object.values(rec.products || {}).map(x => ({
+    product: x.product,
+    unit: x.unit,
+    qty: Math.max(0, Number(x.qty || 0) - Number(x.adjusted || 0) - Number(x.reversed || 0))
+  })).filter(x => x.product && x.qty > 0);
+}
+
+function adjustQuickProductionOutstanding(store, product, qtyToAdjust) {
+  const name = productName(product);
+  let remaining = Math.max(0, Number(qtyToAdjust || 0));
+  if (!name || remaining <= 0) return { adjusted: 0, refs: [] };
+  const refs = quickProductionOutstandingByRef(store);
+  const entries = (Array.isArray(store.quickProductions) ? store.quickProductions : [])
+    .slice()
+    .sort((a,b)=>String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  const t = today();
+  const adjustedRefs = [];
+  for (const e of entries) {
+    if (!e || e.reversed || e.adjusted) continue;
+    const id = String(e.id || '');
+    const prodRec = refs[id]?.products?.[name];
+    const open = prodRec ? Math.max(0, Number(prodRec.qty || 0) - Number(prodRec.adjusted || 0) - Number(prodRec.reversed || 0)) : 0;
+    if (open <= 0) continue;
+    const q = Math.min(open, remaining);
+    if (q <= 0) continue;
+    const productRow = store.products?.[name] || {};
+    const current = Number(productRow.available || 0);
+    addStockLedger(store, name, 'QUICK_PRODUCTION_ADJUST', q, current, current, `Final stock entry adjusted quick production ${id}`, id);
+    adjustedRefs.push({ id, qty: q });
+    remaining -= q;
+    if (remaining <= 0) break;
+  }
+  return { adjusted: Math.max(0, Number(qtyToAdjust || 0) - remaining), refs: adjustedRefs };
+}
+
 function username(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
 }
@@ -633,7 +701,8 @@ function normalizeQuickProductions(entries, ledger) {
       reversed: !!(e.reversed || e.adjusted),
       adjusted: !!(e.reversed || e.adjusted),
       reversedAt: e.reversedAt || null,
-      reverseNote: e.reverseNote || ''
+      reverseNote: e.reverseNote || '',
+      activeItems: activeQuickProductionItems({ stockLedger: ledger, products: {} , quickProductions: source }, id)
     });
   }
   const group = {};
@@ -660,6 +729,7 @@ function normalizeQuickProductions(entries, ledger) {
     e.adjusted = e.reversed;
     e.reversedAt = e.reversed ? 'Reversed in stock ledger' : null;
     e.reverseNote = e.reversed ? 'Reversed from stock ledger' : '';
+    e.activeItems = activeQuickProductionItems({ stockLedger: ledger, products: {}, quickProductions: Object.values(group) }, e.id);
     out.push(e);
   }
   return out.sort((a,b)=>String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 1000);
@@ -1027,10 +1097,12 @@ async function handleApi(req, res, url) {
         store.products[name].lastStatus = '-' + qty + ' Out';
         addStockLedger(store, name, 'OUT', -(opening - closing), opening, closing, 'Manual stock out');
       } else {
-        closing = Math.max(0, opening + qty);
+        const qpAdjust = adjustQuickProductionOutstanding(store, name, qty);
+        const actualIn = Math.max(0, qty - Number(qpAdjust.adjusted || 0));
+        closing = Math.max(0, opening + actualIn);
         store.products[name].available = closing;
-        store.products[name].lastStatus = '+' + qty + ' In';
-        addStockLedger(store, name, 'IN', closing - opening, opening, closing, 'Manual stock in');
+        store.products[name].lastStatus = qpAdjust.adjusted > 0 ? `+${actualIn} In, ${qpAdjust.adjusted} Quick adjusted` : '+' + qty + ' In';
+        if (actualIn > 0) addStockLedger(store, name, 'IN', actualIn, opening, closing, 'Manual stock in');
       }
       store.products[name].updatedAt = today().iso;
     });

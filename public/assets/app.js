@@ -763,29 +763,20 @@ function quickProductionOrderIds(h) {
 }
 function quickProductionOpenRows(h) {
   if (!h || h.reversed || h.adjusted) return [];
-  const ids = quickProductionOrderIds(h);
-  if (!ids.size) return [];
-  const allocation = buildAllocation(currentAllocationMode());
-  const map = {};
-  (state.orders || []).filter(o => ids.has(String(o.id)) && isPending(o)).forEach(order => {
-    const rec = allocation[order.id];
-    if (!rec || !rec.items) return;
-    (order.items || []).forEach(item => {
-      const product = String(item.product || '').trim();
-      if (!product) return;
-      const row = rec.items[product] || {};
-      const short = Number(row.short || 0);
-      if (short <= 0) return;
-      const unit = productUnit(product);
-      const category = productCategory(product);
-      const key = category + '||' + product + '||' + unit;
-      if (!map[key]) map[key] = { category, product, unit, qty: 0, parties: new Set(), orders: new Set() };
-      map[key].qty += short;
-      map[key].parties.add(String(order.party || ''));
-      map[key].orders.add(String(order.id || ''));
-    });
-  });
-  return Object.values(map).sort((a,b)=>String(a.category).localeCompare(String(b.category)) || compareProductsBySequence(a.product,b.product));
+  // v64: Active ka matlab quick-production stock jo abhi final stock-in se adjust nahi hua.
+  // Order delivered ho gaya ho tab bhi active balance dikhega jab tak final stock entry se settle na ho.
+  if (Array.isArray(h.activeItems) && h.activeItems.length) {
+    return h.activeItems.map(i => ({
+      category: i.category || productCategory(i.product) || 'MAIN',
+      product: i.product,
+      unit: i.unit || productUnit(i.product),
+      qty: Math.max(0, Number(i.qty || 0)),
+      parties: Array.isArray(i.parties) ? i.parties : [],
+      orders: new Set()
+    })).filter(i => i.product && i.qty > 0)
+      .sort((a,b)=>String(a.category).localeCompare(String(b.category)) || compareProductsBySequence(a.product,b.product));
+  }
+  return [];
 }
 let quickProductionHistoryMode = 'active';
 function quickProductionAllRows(h) {
@@ -833,7 +824,7 @@ function renderQuickProductionOrders(h) {
 }
 function quickProductionStatusHtml(h, openRows) {
   if (h.reversed || h.adjusted) return `<span class="badge badge-light">Reversed</span><br><span class="muted">${escapeHtml(h.reverseNote || h.reversedAt || 'Reversed')}</span>`;
-  if (quickProductionHistoryMode === 'active') return `<span class="badge warn">Need stock in</span><br><span class="muted">${qty(openRows.reduce((s,r)=>s+Number(r.qty||0),0))} total pending</span>`;
+  if (quickProductionHistoryMode === 'active') return `<span class="badge warn">Pending adjustment</span><br><span class="muted">${qty(openRows.reduce((s,r)=>s+Number(r.qty||0),0))} stock-in balance</span>`;
   const ids = quickProductionOrderIds(h);
   const linked = (state.orders || []).filter(o => ids.has(String(o.id)));
   if (linked.length && linked.every(isDelivered)) return '<span class="badge badge-delivered">Delivered</span>';
@@ -848,7 +839,7 @@ function renderQuickProductionHistory() {
   if (activeBtn) activeBtn.className = quickProductionHistoryMode === 'active' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
   if (allBtn) allBtn.className = quickProductionHistoryMode === 'all' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
   const hint = $('qpHistoryHint');
-  if (hint) hint.textContent = quickProductionHistoryMode === 'active' ? 'Active Requirement mein sirf jo abhi bhi stock maang raha hai woh dikhega.' : 'All History mein delivered, active aur reversed quick production sab record dikhega.';
+  if (hint) hint.textContent = quickProductionHistoryMode === 'active' ? 'Active Requirement mein quick production ka woh balance dikhega jo final stock-in se abhi adjust hona baaki hai.' : 'All History mein delivered, active aur reversed quick production sab record dikhega.';
   const allRows = Array.isArray(state.quickProductions) ? state.quickProductions.slice(0, 300) : [];
   const visible = allRows.map(h => ({ h, openRows: quickProductionOpenRows(h), allItems: quickProductionAllRows(h) }))
     .filter(x => quickProductionHistoryMode === 'all' ? x.allItems.length > 0 : x.openRows.length > 0);

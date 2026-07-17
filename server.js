@@ -314,6 +314,40 @@ function addStockLedger(store, product, type, qtyChange, opening, closing, note,
   if (store.stockLedger.length > 10000) store.stockLedger = store.stockLedger.slice(0, 10000);
 }
 
+
+function applyQuickProductionAdjustment(store, product, qtyIn) {
+  const name = productName(product);
+  let remainingIn = Math.max(0, Number(qtyIn || 0));
+  let adjusted = 0;
+  const refs = [];
+  if (!name || remainingIn <= 0 || !Array.isArray(store.quickProductions)) return { adjusted: 0, remainingToStock: remainingIn, refs };
+  // Oldest active quick production gets adjusted first.
+  const batches = store.quickProductions.slice().sort((a,b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  for (const batch of batches) {
+    if (remainingIn <= 0) break;
+    if (!batch || batch.reversed) continue;
+    if (!Array.isArray(batch.items)) continue;
+    for (const item of batch.items) {
+      if (remainingIn <= 0) break;
+      if (productName(item.product) !== name) continue;
+      const originalQty = Math.max(0, Number(item.qty || item.quantity || 0));
+      if (item.remaining == null) item.remaining = Math.max(0, originalQty - Math.max(0, Number(item.adjustedQty || 0)));
+      let active = Math.max(0, Number(item.remaining || 0));
+      if (active <= 0) continue;
+      const take = Math.min(active, remainingIn);
+      item.remaining = Math.max(0, active - take);
+      item.adjustedQty = Math.max(0, Number(item.adjustedQty || 0)) + take;
+      remainingIn -= take;
+      adjusted += take;
+      refs.push(batch.id || item.refId || 'quick');
+    }
+    const activeLeft = batch.items.reduce((sum, item) => sum + Math.max(0, Number(item.remaining == null ? Math.max(0, Number(item.qty || 0) - Number(item.adjustedQty || 0)) : item.remaining)), 0);
+    batch.adjusted = activeLeft <= 0;
+    batch.status = batch.reversed ? 'Reversed' : (batch.adjusted ? 'Adjusted' : 'Active');
+  }
+  return { adjusted, remainingToStock: remainingIn, refs: Array.from(new Set(refs)) };
+}
+
 function username(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
 }
@@ -589,6 +623,7 @@ function sanitize(store) {
     salesmen: Object.keys(store.salesmen || {}).sort().map((u) => ({ username: u, createdAt: store.salesmen[u].createdAt || null, targets: normalizeTargets(store.salesmen[u].targets || {}) })),
     vardana: normalizeVardana(store.vardana || {}),
     stockLedger: normalizeStockLedger(store.stockLedger || []),
+    quickProductions: Array.isArray(store.quickProductions) ? store.quickProductions : [],
     adminUsers: sanitizeAdminUsers(store.adminUsers || {}),
     rolePermissions: normalizeRolePermissions(store.rolePermissions || {}),
     meta: store.meta || {}
@@ -848,9 +883,9 @@ async function handleApi(req, res, url) {
         store.products[row.product].lastStatus = `Quick Production +${row.qty}`;
         store.products[row.product].updatedAt = t.iso;
         addStockLedger(store, row.product, 'QUICK_PRODUCTION', row.qty, opening, closing, note, batchId);
-        details.push({ product: row.product, qty: row.qty, unit: store.products[row.product].unit, opening, closing });
+        details.push({ product: row.product, qty: row.qty, unit: store.products[row.product].unit, opening, closing, remaining: row.qty, adjustedQty: 0, status: 'Active' });
       }
-      store.quickProductions.unshift({ id: batchId, date: t.date, time: t.time, createdAt: t.iso, orderIds, note, items: details, adjusted: false });
+      store.quickProductions.unshift({ id: batchId, date: t.date, time: t.time, createdAt: t.iso, orderIds, note, items: details, adjusted: false, status: 'Active' });
       if (store.quickProductions.length > 1000) store.quickProductions = store.quickProductions.slice(0, 1000);
     });
     return okState(res);
@@ -875,10 +910,17 @@ async function handleApi(req, res, url) {
         store.products[name].lastStatus = '-' + qty + ' Out';
         addStockLedger(store, name, 'OUT', -(opening - closing), opening, closing, 'Manual stock out');
       } else {
-        closing = Math.max(0, opening + qty);
+        const qpAdjust = applyQuickProductionAdjustment(store, name, qty);
+        const addQty = Math.max(0, Number(qpAdjust.remainingToStock || 0));
+        closing = Math.max(0, opening + addQty);
         store.products[name].available = closing;
-        store.products[name].lastStatus = '+' + qty + ' In';
-        addStockLedger(store, name, 'IN', closing - opening, opening, closing, 'Manual stock in');
+        if (qpAdjust.adjusted > 0) {
+          addStockLedger(store, name, 'QUICK_ADJUST', 0, opening, opening, `Quick Production adjustment ${qpAdjust.adjusted}; final stock in ${qty}`);
+        }
+        if (addQty > 0) {
+          addStockLedger(store, name, 'IN', addQty, opening, closing, qpAdjust.adjusted > 0 ? `Manual stock in after quick adjustment. Adjusted ${qpAdjust.adjusted}` : 'Manual stock in');
+        }
+        store.products[name].lastStatus = qpAdjust.adjusted > 0 ? `Quick adjusted ${qpAdjust.adjusted}; +${addQty} In` : '+' + qty + ' In';
       }
       store.products[name].updatedAt = today().iso;
     });

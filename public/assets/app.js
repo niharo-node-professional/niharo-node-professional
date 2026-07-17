@@ -3,7 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
-let state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], adminUsers: [], rolePermissions: {}, meta: {} };
+let state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], quickProductions: [], adminUsers: [], rolePermissions: {}, meta: {} };
 let adminToken = localStorage.getItem('niharo_admin_token') || '';
 let adminUser = localStorage.getItem('niharo_admin_user') || '';
 let adminRole = localStorage.getItem('niharo_admin_role') || '';
@@ -95,6 +95,7 @@ function normalizeState(raw) {
     salesmen,
     vardana: normalizeVardanaClient(raw.vardana || {}),
     stockLedger: Array.isArray(raw.stockLedger || raw.inventoryLedger) ? (raw.stockLedger || raw.inventoryLedger) : [],
+    quickProductions: Array.isArray(raw.quickProductions) ? raw.quickProductions : [],
     adminUsers: Array.isArray(raw.adminUsers) ? raw.adminUsers : [],
     rolePermissions: raw.rolePermissions || defaultClientRolePermissions(),
     meta: raw.meta || {}
@@ -575,6 +576,41 @@ function groupWorkerTotalsByCategory(rows) {
 }
 
 
+
+function quickProductionHistoryRows() {
+  const rows = [];
+  (state.quickProductions || []).forEach(batch => {
+    (batch.items || []).forEach(item => {
+      const qtyOriginal = Number(item.qty || 0);
+      const adjustedQty = Number(item.adjustedQty || 0);
+      const remaining = item.remaining == null ? Math.max(0, qtyOriginal - adjustedQty) : Math.max(0, Number(item.remaining || 0));
+      rows.push({ batch, item, remaining, adjustedQty, qtyOriginal });
+    });
+  });
+  return rows;
+}
+function renderQuickProductionHistory() {
+  const body = $('quickProductionHistoryBody');
+  if (!body) return;
+  const rows = quickProductionHistoryRows();
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty-state">Abhi quick production entry nahi hai.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(r => {
+    const b = r.batch || {}, item = r.item || {};
+    const status = r.remaining > 0 ? '<span class="badge badge-pending">Active</span>' : '<span class="badge badge-success">Adjusted</span>';
+    return `<tr><td>${escapeHtml((b.date || '') + ' ' + (b.time || ''))}</td><td>${escapeHtml(item.product || '')}</td><td>${qty(r.qtyOriginal)} ${escapeHtml(item.unit || productUnit(item.product))}</td><td>${qty(r.adjustedQty)} ${escapeHtml(item.unit || productUnit(item.product))}</td><td><b>${qty(r.remaining)} ${escapeHtml(item.unit || productUnit(item.product))}</b></td><td>${status}</td><td>${escapeHtml(b.note || '')}</td></tr>`;
+  }).join('');
+}
+function openQuickProductionHistory() {
+  renderQuickProductionHistory();
+  if ($('quickProductionModal')) $('quickProductionModal').style.display = 'flex';
+}
+function closeQuickProductionHistory() {
+  if ($('quickProductionModal')) $('quickProductionModal').style.display = 'none';
+}
+
 function quickProductionRowsForSelected() {
   if (!selectedDispatchOrders.size) return [];
   const sel = currentDispatchSelection();
@@ -597,14 +633,20 @@ async function quickProductionForSelectedOrders() {
   if (!selectedDispatchOrders.size) return toast('Pehle jis party/order ko complete karna hai uska checkbox tick karo.', 'error');
   const rows = quickProductionRowsForSelected();
   if (!rows.length) return toast('Selected orders me pending/short items nahi mile.', 'error');
-  const preview = rows.map(r => `${r.product}: ${qty(r.qty)} ${r.unit}`).join('\n');
-  if (!confirm('Selected parties ke pending items ko stock me Quick Production add karna hai?\n\n' + preview + '\n\nIske baad selected orders ready/deliver ho sakenge.')) return;
+  const preview = rows.map(r => `${r.category || productCategory(r.product)} | ${r.product}: ${qty(r.qty)} ${r.unit}`).join('\n');
+  const ok = confirm('QUICK PRODUCTION PREVIEW\n\nSelected orders ko complete karne ke liye ye stock banana/add karna hai:\n\n' + preview + '\n\nConfirm karne par stock turant inventory me add hoga, history save hogi aur orders recalculate honge.');
+  if (!ok) return;
   try {
-    const data = await api('/api/production/quick-selected', { method: 'POST', body: { items: rows.map(r => ({ product: r.product, qty: r.qty, unit: r.unit, category: r.category })), orderIds: Array.from(selectedDispatchOrders), note: 'Selected pending orders complete karne ke liye quick production' } });
+    const selectedIds = Array.from(selectedDispatchOrders);
+    const data = await api('/api/production/quick-selected', { method: 'POST', body: { items: rows.map(r => ({ product: r.product, qty: r.qty, unit: r.unit, category: r.category })), orderIds: selectedIds, note: 'Selected pending orders complete karne ke liye quick production' } });
     state = normalizeState(data.state || data.data);
+    const allocation = buildAllocation(currentAllocationMode());
+    const stillShort = selectedIds.map(id => allocation[id]).filter(rec => rec && !rec.ready).length;
     selectedDispatchOrders.clear();
     renderAll();
-    toast('Quick Production stock add ho gaya. Pending orders recalculated.', 'success');
+    renderQuickProductionHistory();
+    if (stillShort) toast('Quick Production add ho gaya, lekin kuch selected orders abhi allocation/priority ki wajah se short hain. Order list refresh check karein.', 'error');
+    else toast('Quick Production stock add + history save + selected orders recalculated.', 'success');
   } catch(e) { toast(e.message, 'error'); }
 }
 
@@ -1583,7 +1625,7 @@ function initEvents() {
   $('openParserBtn').addEventListener('click', () => { if (!requirePerm('orders','edit')) return; $('parserModal').classList.add('show'); $('parserPreview').innerHTML = ''; $('importParsedBtn').style.display = 'none'; parsedOrder = null; }); $('closeParserBtn').addEventListener('click', () => $('parserModal').classList.remove('show')); $('parseBtn').addEventListener('click', () => { parsedOrder = parseWhatsApp($('parserText').value); if (!parsedOrder.items.length) return toast('Valid item lines nahi mili', 'error'); $('parserPreview').innerHTML = `<div class="card" style="box-shadow:none"><b>Party:</b> ${escapeHtml(parsedOrder.party || 'Not found')}<br><br>${parsedOrder.items.map(i => `• ${escapeHtml(i.product)} — ${qty(i.qty)} ${escapeHtml(productUnit(i.product))} @ ${money(i.rate)}`).join('<br>')}</div>`; $('importParsedBtn').style.display = ''; }); $('importParsedBtn').addEventListener('click', async () => { if (!parsedOrder) return; if (parsedOrder.party && !state.parties.includes(parsedOrder.party)) { if (confirm(`Party "${parsedOrder.party}" listed nahi hai. Add karein?`)) { try { const data = await api('/api/parties', { method: 'POST', body: { name: parsedOrder.party } }); state = normalizeState(data.state || data.data); } catch(e) { toast(e.message, 'error'); return; } } else return; } $('orderParty').value = parsedOrder.party; cart = parsedOrder.items; renderCart(); $('parserModal').classList.remove('show'); toast('Imported to cart', 'success'); });
   $('exportBtn').addEventListener('click', async () => { if (!requirePerm('settings','export')) return; try { const data = await api('/api/export'); const blob = new Blob([JSON.stringify(data.store || data.data || data.state, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'niharo-backup-' + new Date().toISOString().slice(0,10) + '.json'; a.click(); URL.revokeObjectURL(a.href); } catch(e) { toast(e.message, 'error'); } });
   $('importFile').addEventListener('change', async e => { if (!requirePerm('settings','edit')) return; const file = e.target.files[0]; if (!file) return; if (!confirm('Backup import karne se current data replace ho sakta hai. Continue?')) return; try { const raw = JSON.parse(await file.text()); const data = await api('/api/import', { method: 'POST', body: raw }); state = normalizeState(data.state || data.data); renderAll(); toast('Backup imported', 'success'); } catch(err) { toast(err.message, 'error'); } e.target.value = ''; });
-  if ($('adminUserForm')) $('adminUserForm').addEventListener('submit', saveAdminUser); if ($('rolePermissionRole')) $('rolePermissionRole').addEventListener('change', renderRolePermissions); if ($('saveRolePermissionsBtn')) $('saveRolePermissionsBtn').addEventListener('click', saveRolePermissions); if ($('allocationMode')) { $('allocationMode').value = localStorage.getItem('niharo_allocation_mode') || 'SMART'; $('allocationMode').addEventListener('change', () => { localStorage.setItem('niharo_allocation_mode', $('allocationMode').value); renderRecentOrders(); renderOrders(); }); } if ($('selectShortageOrdersBtn')) $('selectShortageOrdersBtn').addEventListener('click', () => window.selectShortageOrders()); if ($('clearDispatchSelectionBtn')) $('clearDispatchSelectionBtn').addEventListener('click', () => window.clearDispatchSelection()); if ($('exportDispatchPdfBtn')) $('exportDispatchPdfBtn').addEventListener('click', exportDispatchPdf); if ($('exportWorkerSlipBtn')) $('exportWorkerSlipBtn').addEventListener('click', exportWorkerSlipPdf); if ($('quickProductionSelectedBtn')) $('quickProductionSelectedBtn').addEventListener('click', quickProductionForSelectedOrders); if ($('exportDispatchXlsBtn')) $('exportDispatchXlsBtn').addEventListener('click', exportDispatchXls); if ($('copyDispatchWhatsAppBtn')) $('copyDispatchWhatsAppBtn').addEventListener('click', copyDispatchWhatsApp); if ($('openDispatchWhatsAppBtn')) $('openDispatchWhatsAppBtn').addEventListener('click', openDispatchWhatsApp);
+  if ($('adminUserForm')) $('adminUserForm').addEventListener('submit', saveAdminUser); if ($('rolePermissionRole')) $('rolePermissionRole').addEventListener('change', renderRolePermissions); if ($('saveRolePermissionsBtn')) $('saveRolePermissionsBtn').addEventListener('click', saveRolePermissions); if ($('allocationMode')) { $('allocationMode').value = localStorage.getItem('niharo_allocation_mode') || 'SMART'; $('allocationMode').addEventListener('change', () => { localStorage.setItem('niharo_allocation_mode', $('allocationMode').value); renderRecentOrders(); renderOrders(); }); } if ($('selectShortageOrdersBtn')) $('selectShortageOrdersBtn').addEventListener('click', () => window.selectShortageOrders()); if ($('clearDispatchSelectionBtn')) $('clearDispatchSelectionBtn').addEventListener('click', () => window.clearDispatchSelection()); if ($('exportDispatchPdfBtn')) $('exportDispatchPdfBtn').addEventListener('click', exportDispatchPdf); if ($('exportWorkerSlipBtn')) $('exportWorkerSlipBtn').addEventListener('click', exportWorkerSlipPdf); if ($('quickProductionSelectedBtn')) $('quickProductionSelectedBtn').addEventListener('click', quickProductionForSelectedOrders); if ($('quickProductionHistoryBtn')) $('quickProductionHistoryBtn').addEventListener('click', openQuickProductionHistory); if ($('closeQuickProductionModalBtn')) $('closeQuickProductionModalBtn').addEventListener('click', closeQuickProductionHistory); if ($('exportDispatchXlsBtn')) $('exportDispatchXlsBtn').addEventListener('click', exportDispatchXls); if ($('copyDispatchWhatsAppBtn')) $('copyDispatchWhatsAppBtn').addEventListener('click', copyDispatchWhatsApp); if ($('openDispatchWhatsAppBtn')) $('openDispatchWhatsAppBtn').addEventListener('click', openDispatchWhatsApp);
   $('resetBtn').addEventListener('click', async () => { if (!requirePerm('settings','delete')) return; const val = prompt('Full reset ke liye DELETE type karein'); if (val !== 'DELETE') return; try { const data = await api('/api/reset', { method: 'POST', body: { confirm: 'DELETE' } }); state = normalizeState(data.state || data.data); renderAll(); toast('Database reset', 'success'); } catch(e) { toast(e.message, 'error'); } });
 }
 updateAuthLock();

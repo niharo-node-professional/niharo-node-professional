@@ -168,7 +168,7 @@
           <div class="col-4"><label>Shortage</label><select id="filterShortage"><option value="ALL">All</option><option value="SHORT">Only shortage</option><option value="OK">Ready to deliver</option><option value="ALMOST">Almost ready</option></select></div>
           <div class="col-4"><label>Allocation mode</label><select id="allocationMode"><option value="SMART">Smart dispatch</option><option value="FIFO">FIFO</option><option value="MANUAL">Manual priority</option></select></div>
           <div class="col-8"><label>Dispatch summary</label><div class="filter-summary" id="allocationSummary">Ready calculation pending...</div></div>
-          <div class="col-12"><label>Pending items export</label><div class="table-actions"><button class="btn btn-soft btn-sm" id="selectShortageOrdersBtn">Select shortage orders</button><button class="btn btn-soft btn-sm" id="clearDispatchSelectionBtn">Clear selection</button><button class="btn btn-blue btn-sm" id="exportDispatchPdfBtn">Print / PDF</button><button class="btn btn-primary btn-sm" id="exportWorkerSlipBtn">Worker Slip</button><button class="btn btn-warning btn-sm" id="quickProductionSelectedBtn">Quick Production</button><button class="btn btn-success btn-sm" id="exportDispatchXlsBtn">Excel</button><button class="btn btn-warning btn-sm" id="copyDispatchWhatsAppBtn">Copy WhatsApp</button><button class="btn btn-soft btn-sm" id="openDispatchWhatsAppBtn">Open WhatsApp</button></div><div class="hint-line" id="dispatchSelectionInfo">Checkbox tick karoge to sirf selected parties/orders export honge. Export me sirf pending/short items aur total niklega.</div></div>
+          <div class="col-12"><label>Pending items export</label><div class="table-actions"><button class="btn btn-soft btn-sm" id="selectShortageOrdersBtn">Select shortage orders</button><button class="btn btn-soft btn-sm" id="clearDispatchSelectionBtn">Clear selection</button><button class="btn btn-blue btn-sm" id="exportDispatchPdfBtn">Print / PDF</button><button class="btn btn-primary btn-sm" id="exportWorkerSlipBtn">Worker Slip</button><button class="btn btn-warning btn-sm" id="quickProductionSelectedBtn">Quick Production</button><button class="btn btn-soft btn-sm" id="quickProductionHistoryBtn">Quick Production History</button><button class="btn btn-success btn-sm" id="exportDispatchXlsBtn">Excel</button><button class="btn btn-warning btn-sm" id="copyDispatchWhatsAppBtn">Copy WhatsApp</button><button class="btn btn-soft btn-sm" id="openDispatchWhatsAppBtn">Open WhatsApp</button></div><div class="hint-line" id="dispatchSelectionInfo">Checkbox tick karoge to sirf selected parties/orders export honge. Export me sirf pending/short items aur total niklega.</div></div>
         </div>
         <div class="table-wrap"><table><thead><tr><th>Select</th><th>Party & Date</th><th>Booked By</th><th>Items & Stock</th><th>Total</th><th>Action</th></tr></thead><tbody id="ordersBody"></tbody></table></div>
       </div>
@@ -340,7 +340,17 @@
   </div>
 </div>
 
+
+<div class="modal-backdrop" id="quickProductionModal">
+  <div class="modal" style="max-width:980px">
+    <h3>Quick Production History</h3>
+    <p>Active balance wahi qty hai jo quick production se add hui, par final stock-in se abhi adjust honi baaki hai.</p>
+    <div class="table-wrap"><table><thead><tr><th>Date/time</th><th>Product</th><th>Quick Qty</th><th>Adjusted</th><th>Active Balance</th><th>Status</th><th>Note</th></tr></thead><tbody id="quickProductionHistoryBody"></tbody></table></div>
+    <div class="modal-actions"><button class="btn btn-soft" id="closeQuickProductionModalBtn">Close</button></div>
+  </div>
+</div>
+
 <div class="toast-stack" id="toastStack"></div>
-<script src="/assets/app.js?v=50"></script>
+<script src="/assets/app.js?v=52"></script>
 </body>
 </html>

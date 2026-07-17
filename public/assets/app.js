@@ -577,6 +577,7 @@ function groupWorkerTotalsByCategory(rows) {
 
 
 
+let quickProductionHistoryMode = 'active';
 function quickProductionHistoryRows() {
   const rows = [];
   (state.quickProductions || []).forEach(batch => {
@@ -592,9 +593,18 @@ function quickProductionHistoryRows() {
 function renderQuickProductionHistory() {
   const body = $('quickProductionHistoryBody');
   if (!body) return;
-  const rows = quickProductionHistoryRows();
+  const allRows = quickProductionHistoryRows();
+  const rows = quickProductionHistoryMode === 'active' ? allRows.filter(r => Number(r.remaining || 0) > 0) : allRows;
+  const activeBtn = $('quickProductionActiveTabBtn');
+  const allBtn = $('quickProductionAllTabBtn');
+  if (activeBtn && allBtn) {
+    activeBtn.className = quickProductionHistoryMode === 'active' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
+    allBtn.className = quickProductionHistoryMode === 'all' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
+  }
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="7" class="empty-state">Abhi quick production entry nahi hai.</td></tr>';
+    body.innerHTML = quickProductionHistoryMode === 'active'
+      ? '<tr><td colspan="7" class="empty-state">Abhi koi active quick production balance pending nahi hai. Adjusted entries All History mein milengi.</td></tr>'
+      : '<tr><td colspan="7" class="empty-state">Abhi quick production entry nahi hai.</td></tr>';
     return;
   }
   body.innerHTML = rows.map(r => {
@@ -603,7 +613,13 @@ function renderQuickProductionHistory() {
     return `<tr><td>${escapeHtml((b.date || '') + ' ' + (b.time || ''))}</td><td>${escapeHtml(item.product || '')}</td><td>${qty(r.qtyOriginal)} ${escapeHtml(item.unit || productUnit(item.product))}</td><td>${qty(r.adjustedQty)} ${escapeHtml(item.unit || productUnit(item.product))}</td><td><b>${qty(r.remaining)} ${escapeHtml(item.unit || productUnit(item.product))}</b></td><td>${status}</td><td>${escapeHtml(b.note || '')}</td></tr>`;
   }).join('');
 }
+function setQuickProductionHistoryMode(mode) {
+  quickProductionHistoryMode = mode === 'all' ? 'all' : 'active';
+  renderQuickProductionHistory();
+}
+window.setQuickProductionHistoryMode = setQuickProductionHistoryMode;
 function openQuickProductionHistory() {
+  quickProductionHistoryMode = 'active';
   renderQuickProductionHistory();
   if ($('quickProductionModal')) $('quickProductionModal').style.display = 'flex';
 }

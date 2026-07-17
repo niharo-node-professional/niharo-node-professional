@@ -344,13 +344,14 @@
 <div class="modal-backdrop" id="quickProductionModal">
   <div class="modal" style="max-width:980px">
     <h3>Quick Production History</h3>
-    <p>Active balance wahi qty hai jo quick production se add hui, par final stock-in se abhi adjust honi baaki hai.</p>
+    <p>Active tab mein sirf woh product dikhega jiska final stock-in adjustment abhi baaki hai. Balance 0 hote hi woh Active se hatkar All History mein chala jayega.</p>
+    <div class="table-actions" style="margin-bottom:10px"><button class="btn btn-primary btn-sm" id="quickProductionActiveTabBtn" type="button" onclick="setQuickProductionHistoryMode('active')">Active Balance</button><button class="btn btn-soft btn-sm" id="quickProductionAllTabBtn" type="button" onclick="setQuickProductionHistoryMode('all')">All History</button></div>
     <div class="table-wrap"><table><thead><tr><th>Date/time</th><th>Product</th><th>Quick Qty</th><th>Adjusted</th><th>Active Balance</th><th>Status</th><th>Note</th></tr></thead><tbody id="quickProductionHistoryBody"></tbody></table></div>
     <div class="modal-actions"><button class="btn btn-soft" id="closeQuickProductionModalBtn">Close</button></div>
   </div>
 </div>
 
 <div class="toast-stack" id="toastStack"></div>
-<script src="/assets/app.js?v=52"></script>
+<script src="/assets/app.js?v=54clean"></script>
 </body>
 </html>

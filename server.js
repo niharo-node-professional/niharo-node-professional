@@ -388,6 +388,45 @@ function today() {
   return { date: d.toISOString().slice(0, 10), time: d.toTimeString().slice(0, 5), iso: d.toISOString() };
 }
 
+function normalizeQuickProductions(input) {
+  const rows = Array.isArray(input) ? input : [];
+  return rows.map(batch => {
+    const b = batch && typeof batch === 'object' ? batch : {};
+    const items = Array.isArray(b.items) ? b.items.map(item => {
+      const it = item && typeof item === 'object' ? item : {};
+      const product = productName(it.product || it.name);
+      const qty = Math.max(0, Number(it.qty || it.quantity || 0));
+      const adjustedQty = Math.max(0, Number(it.adjustedQty || 0));
+      const remaining = it.remaining == null ? Math.max(0, qty - adjustedQty) : Math.max(0, Number(it.remaining || 0));
+      if (!product || qty <= 0) return null;
+      return {
+        product,
+        qty,
+        unit: productUnit(it.unit || (input.products && input.products[product] && input.products[product].unit) || 'PCS'),
+        opening: Math.max(0, Number(it.opening || 0)),
+        closing: Math.max(0, Number(it.closing || 0)),
+        adjustedQty,
+        remaining,
+        status: remaining > 0 ? 'Active' : 'Adjusted'
+      };
+    }).filter(Boolean) : [];
+    if (!items.length) return null;
+    const remainingTotal = items.reduce((sum, it) => sum + Math.max(0, Number(it.remaining || 0)), 0);
+    return {
+      id: String(b.id || crypto.randomUUID()),
+      date: String(b.date || today().date),
+      time: String(b.time || today().time),
+      createdAt: b.createdAt || today().iso,
+      orderIds: Array.isArray(b.orderIds) ? b.orderIds.map(x => String(x)) : [],
+      note: String(b.note || ''),
+      items,
+      reversed: !!b.reversed,
+      adjusted: remainingTotal <= 0,
+      status: b.reversed ? 'Reversed' : (remainingTotal <= 0 ? 'Adjusted' : 'Active')
+    };
+  }).filter(Boolean).slice(0, 1000);
+}
+
 function normalizeStore(input) {
   const out = emptyStore();
   input = input && typeof input === 'object' ? input : {};
@@ -455,6 +494,7 @@ function normalizeStore(input) {
 
   out.vardana = normalizeVardana(input.vardana || {});
   out.stockLedger = normalizeStockLedger(input.stockLedger || input.inventoryLedger || []);
+  out.quickProductions = normalizeQuickProductions(input.quickProductions || []);
   out.adminUsers = normalizeAdminUsers(input.adminUsers || {});
   out.rolePermissions = normalizeRolePermissions(input.rolePermissions || {});
 
@@ -479,6 +519,7 @@ function normalizeOrder(order) {
     createdAt: order.createdAt || t.iso,
     deliveredDate: order.deliveredDate || null,
     deliveredAt: order.deliveredAt || null,
+    quickProductionAt: order.quickProductionAt || null,
     priority: ['High','Normal','Low','Hold'].includes(String(order.priority || 'Normal')) ? String(order.priority || 'Normal') : 'Normal'
   };
 }
@@ -884,6 +925,10 @@ async function handleApi(req, res, url) {
         store.products[row.product].updatedAt = t.iso;
         addStockLedger(store, row.product, 'QUICK_PRODUCTION', row.qty, opening, closing, note, batchId);
         details.push({ product: row.product, qty: row.qty, unit: store.products[row.product].unit, opening, closing, remaining: row.qty, adjustedQty: 0, status: 'Active' });
+      }
+      const selectedSet = new Set(orderIds.map(x => String(x)));
+      if (selectedSet.size && Array.isArray(store.orders)) {
+        store.orders = store.orders.map(o => selectedSet.has(String(o.id)) ? Object.assign({}, o, { priority: 'High', quickProductionAt: t.iso }) : o);
       }
       store.quickProductions.unshift({ id: batchId, date: t.date, time: t.time, createdAt: t.iso, orderIds, note, items: details, adjusted: false, status: 'Active' });
       if (store.quickProductions.length > 1000) store.quickProductions = store.quickProductions.slice(0, 1000);

@@ -653,26 +653,24 @@ function quickProductionRowsForSelected(mode = 'SELECTED_ONLY') {
       });
     });
   } else {
-    // Default and safe mode: sirf selected order(s) ki actual shortage add hogi.
-    // Dusre pending orders ka extra stock is calculation mein include nahi hoga.
+    // Default and safe mode: screen par jo selected order ka current allocation short dikh raha hai,
+    // wahi quick production mein add hoga. Isse selected order ke displayed Short qty se mismatch nahi hoga.
+    // Dusre orders ka full requirement add nahi hota; sirf selected row ke allocation short items add hote hain.
+    const allocRows = buildAllocation(currentAllocationMode());
     const selectedOrders = sortedPendingOrders(currentAllocationMode()).filter(o => selected.has(String(o.id)));
     selectedOrders.forEach(order => {
+      const rec = allocRows[order.id] || { items: {} };
       (order.items || []).forEach(item => {
         const product = String(item.product || '').trim();
         if (!product) return;
-        const demand = Number(item.qty || 0);
-        if (demand <= 0) return;
-        const before = Math.max(0, Number(stock[product] || 0));
-        const alloc = Math.min(before, demand);
-        const short = Math.max(0, demand - alloc);
-        stock[product] = Math.max(0, before - alloc);
-        if (short > 0) needed[product] = Number(needed[product] || 0) + short;
-        if (short > 0) {
-          if (!orderNames[product]) orderNames[product] = new Set();
-          if (!parties[product]) parties[product] = new Set();
-          orderNames[product].add(String(order.id));
-          parties[product].add(String(order.party || ''));
-        }
+        const itemAlloc = rec.items?.[product];
+        const short = Math.max(0, Number(itemAlloc?.short || 0));
+        if (short <= 0) return;
+        needed[product] = Number(needed[product] || 0) + short;
+        if (!orderNames[product]) orderNames[product] = new Set();
+        if (!parties[product]) parties[product] = new Set();
+        orderNames[product].add(String(order.id));
+        parties[product].add(String(order.party || ''));
       });
     });
   }

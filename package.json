@@ -1,6 +1,6 @@
 {
   "name": "niharo-node-professional",
-  "version": "1.0.65",
+  "version": "1.0.66",
   "description": "Niharo Warehouse WMS with Node.js backend, professional dashboard and mobile salesman web app",
   "main": "server.js",
   "type": "commonjs",

@@ -69,8 +69,7 @@
         <div class="card">
           <div class="card-title"><div><h2>Office order entry</h2><p>Manual order banayein ya WhatsApp format paste karein.</p></div><button class="btn btn-success btn-sm" id="openParserBtn">WhatsApp import</button></div>
           <form id="orderItemForm" class="form-grid">
-            <div class="col-4"><label>Party</label><select id="orderParty"></select></div>
-            <div class="col-3"><label>Salesman / booked by</label><select id="orderSalesman"><option value="OFFICE ADMIN">OFFICE ADMIN</option></select></div>
+            <div class="col-5"><label>Party</label><select id="orderParty"></select></div>
             <div class="col-3"><label>Product</label><select id="orderProduct"></select></div>
             <div class="col-2"><label id="orderQtyLabel">Qty</label><input id="orderQty" type="number" min="0.01" step="0.01"></div>
             <div class="col-2" id="orderAltQtyWrap"><label id="orderAltQtyLabel">Alt Qty</label><input id="orderAltQty" type="number" min="0.01" step="0.01"></div>
@@ -94,10 +93,10 @@
         <div class="form-grid compact-filter" style="margin-bottom:14px">
           <div class="col-3"><label>Category filter</label><select id="inventoryCategoryFilter"><option value="ALL">All categories</option></select></div>
           <div class="col-3"><label>Stock filter</label><select id="inventoryStockFilter"><option value="ALL">All stock</option><option value="POSITIVE">Positive stock</option><option value="ZERO">Zero stock</option><option value="NEGATIVE">Negative stock</option><option value="SHORT">Shortage only</option></select></div>
-          <div class="col-3"><label>Sort</label><select id="inventorySortFilter"><option value="CUSTOM">Custom sequence (drag lock)</option><option value="NAME_ASC">Product A to Z</option><option value="STOCK_DESC">Stock high to low</option><option value="STOCK_ASC">Stock low to high</option><option value="DEMAND_DESC">Pending demand high to low</option><option value="SHORTAGE_DESC">Shortage high to low</option></select></div>
+          <div class="col-3"><label>Sort</label><select id="inventorySortFilter"><option value="NAME_ASC">Product A to Z</option><option value="STOCK_DESC">Stock high to low</option><option value="STOCK_ASC">Stock low to high</option><option value="DEMAND_DESC">Pending demand high to low</option><option value="SHORTAGE_DESC">Shortage high to low</option></select></div>
           <div class="col-3"><label>Summary</label><div class="filter-summary" id="inventorySummary">0 products</div></div>
         </div>
-        <p class="helper-line">Drag handle se products ko upar-niche karke sequence lock kar sakte ho. Ye sequence Inventory, Orders, Worker Slip, MIS aur exports mein use hoga.</p><div class="table-wrap"><table><thead><tr><th>Seq</th><th>Product</th><th>Category</th><th>Base Unit</th><th>Alt Unit / Conversion</th><th>Available</th><th>Pending demand</th><th>Shortage</th><th>Action</th></tr></thead><tbody id="inventoryBody"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>Base Unit</th><th>Alt Unit / Conversion</th><th>Available</th><th>Pending demand</th><th>Shortage</th><th>Action</th></tr></thead><tbody id="inventoryBody"></tbody></table></div>
       </div>
 
       <div class="card" id="inventoryHistoryCard" style="margin-top:16px">
@@ -169,7 +168,7 @@
           <div class="col-4"><label>Shortage</label><select id="filterShortage"><option value="ALL">All</option><option value="SHORT">Only shortage</option><option value="OK">Ready to deliver</option><option value="ALMOST">Almost ready</option></select></div>
           <div class="col-4"><label>Allocation mode</label><select id="allocationMode"><option value="SMART">Smart dispatch</option><option value="FIFO">FIFO</option><option value="MANUAL">Manual priority</option></select></div>
           <div class="col-8"><label>Dispatch summary</label><div class="filter-summary" id="allocationSummary">Ready calculation pending...</div></div>
-          <div class="col-12"><label>Pending items export</label><div class="table-actions"><button class="btn btn-soft btn-sm" id="selectShortageOrdersBtn">Select shortage orders</button><button class="btn btn-soft btn-sm" id="clearDispatchSelectionBtn">Clear selection</button><button class="btn btn-blue btn-sm" id="exportDispatchPdfBtn">Print / PDF</button><button class="btn btn-primary btn-sm" id="exportWorkerSlipBtn">Worker Slip</button><button class="btn btn-warning btn-sm" id="quickProductionSelectedBtn">Quick Production</button><button class="btn btn-soft btn-sm" id="viewQuickProductionBtn">Quick Production History</button><button class="btn btn-success btn-sm" id="exportDispatchXlsBtn">Excel</button><button class="btn btn-warning btn-sm" id="copyDispatchWhatsAppBtn">Copy WhatsApp</button><button class="btn btn-soft btn-sm" id="openDispatchWhatsAppBtn">Open WhatsApp</button></div><div class="hint-line" id="dispatchSelectionInfo">Checkbox tick karoge to sirf selected parties/orders export honge. Export me sirf pending/short items aur total niklega.</div></div>
+          <div class="col-12"><label>Pending items export</label><div class="table-actions"><button class="btn btn-soft btn-sm" id="selectShortageOrdersBtn">Select shortage orders</button><button class="btn btn-soft btn-sm" id="clearDispatchSelectionBtn">Clear selection</button><button class="btn btn-blue btn-sm" id="exportDispatchPdfBtn">Print / PDF</button><button class="btn btn-primary btn-sm" id="exportWorkerSlipBtn">Worker Slip</button><button class="btn btn-warning btn-sm" id="quickProductionSelectedBtn">Quick Production</button><button class="btn btn-success btn-sm" id="exportDispatchXlsBtn">Excel</button><button class="btn btn-warning btn-sm" id="copyDispatchWhatsAppBtn">Copy WhatsApp</button><button class="btn btn-soft btn-sm" id="openDispatchWhatsAppBtn">Open WhatsApp</button></div><div class="hint-line" id="dispatchSelectionInfo">Checkbox tick karoge to sirf selected parties/orders export honge. Export me sirf pending/short items aur total niklega.</div></div>
         </div>
         <div class="table-wrap"><table><thead><tr><th>Select</th><th>Party & Date</th><th>Booked By</th><th>Items & Stock</th><th>Total</th><th>Action</th></tr></thead><tbody id="ordersBody"></tbody></table></div>
       </div>
@@ -242,28 +241,17 @@
     </section>
 
     <section class="screen" id="screen-reports">
-      <div class="card mis-card">
-        <div class="card-title"><div><h2>MIS analytics v2</h2><p>Overview, salesman, party, product aur stock movement reports.</p></div><div class="table-actions"><button class="btn btn-success btn-sm" id="exportReportXls">Excel</button><button class="btn btn-blue btn-sm" id="exportReportPdf">Print / PDF</button><button class="btn btn-warning btn-sm" id="copyReportWhatsApp">Copy WhatsApp</button><button class="btn btn-soft btn-sm" id="clearReportFilters">Clear filters</button></div></div>
-        <div class="form-grid mis-filters" style="margin-bottom:14px">
+      <div class="card">
+        <div class="card-title"><div><h2>MIS analytics</h2><p>Date, party, product aur salesman filters ke saath report.</p></div><div class="table-actions"><button class="btn btn-success btn-sm" id="exportReportXls">Export XLS</button><button class="btn btn-blue btn-sm" id="exportReportPdf">Export PDF</button><button class="btn btn-soft btn-sm" id="clearReportFilters">Clear filters</button></div></div>
+        <div class="form-grid" style="margin-bottom:14px">
           <div class="col-2"><label>From</label><input id="reportFrom" type="date"></div>
           <div class="col-2"><label>To</label><input id="reportTo" type="date"></div>
-          <div class="col-2"><label>Salesman</label><select id="reportSalesman"></select></div>
-          <div class="col-2"><label>Party</label><select id="reportParty"></select></div>
-          <div class="col-2"><label>Category</label><select id="reportCategory"></select></div>
+          <div class="col-3"><label>Salesman</label><select id="reportSalesman"></select></div>
+          <div class="col-3"><label>Party</label><select id="reportParty"></select></div>
           <div class="col-2"><label>Product</label><select id="reportProduct"></select></div>
         </div>
-        <div class="kpi-grid"><div class="kpi"><div class="label">Orders</div><div class="value" id="reportOrderCount">0</div></div><div class="kpi"><div class="label">Total Value</div><div class="value" id="reportTotal">₹0</div></div><div class="kpi"><div class="label">Pending Value</div><div class="value" id="reportPendingValue">₹0</div></div><div class="kpi"><div class="label">Delivered Value</div><div class="value" id="reportDeliveredValue">₹0</div></div></div>
-        <div class="mis-tabs" id="misTabs">
-          <button class="mis-tab active" data-mis-tab="overview">Overview</button>
-          <button class="mis-tab" data-mis-tab="salesman">Salesman</button>
-          <button class="mis-tab" data-mis-tab="party">Party</button>
-          <button class="mis-tab" data-mis-tab="product">Product</button>
-          <button class="mis-tab" data-mis-tab="category">Category</button>
-          <button class="mis-tab" data-mis-tab="stock">Stock Movement</button>
-          <button class="mis-tab" data-mis-tab="quick">Quick Production</button>
-        </div>
-        <div class="mis-tab-note" id="misTabNote">Business overview summary.</div>
-        <div class="table-wrap"><table id="misTable"><thead id="misHead"></thead><tbody id="reportBody"></tbody></table></div>
+        <div class="kpi-grid"><div class="kpi"><div class="label">Orders</div><div class="value" id="reportOrderCount">0</div></div><div class="kpi"><div class="label">Total Value</div><div class="value" id="reportTotal">₹0</div></div><div class="kpi"><div class="label">Pending</div><div class="value" id="reportPending">0</div></div><div class="kpi"><div class="label">Delivered</div><div class="value" id="reportDelivered">0</div></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Salesman</th><th>Party</th><th>Items</th><th>Total</th><th>Status</th></tr></thead><tbody id="reportBody"></tbody></table></div>
       </div>
     </section>
 
@@ -352,21 +340,7 @@
   </div>
 </div>
 
-
-<div class="modal-backdrop" id="quickProductionModal">
-  <div class="modal modal-wide quick-modal">
-    <div class="modal-head">
-      <div>
-        <h3>Quick Production History</h3>
-        <p>Active requirement aur all quick production history dono yahan dekh sakte ho.</p>
-      </div>
-      <button class="btn btn-soft" id="closeQuickProductionBtn" type="button">Close</button>
-    </div>
-    <div class="qp-tabs"><button class="btn btn-primary btn-sm" id="qpActiveTabBtn" type="button">Active Requirement</button><button class="btn btn-soft btn-sm" id="qpAllTabBtn" type="button">All History</button></div><div class="hint-line" id="qpHistoryHint">Active Requirement mein sirf jo abhi stock maang raha hai woh dikhega.</div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Items</th><th>Selected party/order</th><th>Note</th><th>Status</th><th>Action</th></tr></thead><tbody id="quickProductionHistoryBody"></tbody></table></div>
-  </div>
-</div>
-
 <div class="toast-stack" id="toastStack"></div>
-<script src="/assets/app.js?v=63"></script>
+<script src="/assets/app.js?v=50"></script>
 </body>
 </html>

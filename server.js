@@ -314,74 +314,6 @@ function addStockLedger(store, product, type, qtyChange, opening, closing, note,
   if (store.stockLedger.length > 10000) store.stockLedger = store.stockLedger.slice(0, 10000);
 }
 
-
-function quickProductionOutstandingByRef(store) {
-  const ledger = Array.isArray(store.stockLedger) ? store.stockLedger : [];
-  const refs = {};
-  for (const r of ledger.slice().reverse()) {
-    const type = String(r.type || '').toUpperCase();
-    const refId = String(r.refId || '').trim();
-    const product = productName(r.product);
-    if (!refId || !product) continue;
-    if (type === 'QUICK_PRODUCTION') {
-      if (!refs[refId]) refs[refId] = { id: refId, products: {} };
-      const unit = productUnit(r.unit || (store.products?.[product]?.unit) || 'PCS');
-      if (!refs[refId].products[product]) refs[refId].products[product] = { product, unit, qty: 0, adjusted: 0, reversed: 0 };
-      refs[refId].products[product].qty += Math.max(0, Number(r.qty || 0));
-    } else if (type === 'QUICK_PRODUCTION_ADJUST') {
-      if (!refs[refId]) refs[refId] = { id: refId, products: {} };
-      const unit = productUnit(r.unit || (store.products?.[product]?.unit) || 'PCS');
-      if (!refs[refId].products[product]) refs[refId].products[product] = { product, unit, qty: 0, adjusted: 0, reversed: 0 };
-      refs[refId].products[product].adjusted += Math.max(0, Number(r.qty || 0));
-    } else if (type === 'QUICK_PRODUCTION_REVERSE') {
-      if (!refs[refId]) refs[refId] = { id: refId, products: {} };
-      const unit = productUnit(r.unit || (store.products?.[product]?.unit) || 'PCS');
-      if (!refs[refId].products[product]) refs[refId].products[product] = { product, unit, qty: 0, adjusted: 0, reversed: 0 };
-      refs[refId].products[product].reversed += Math.abs(Number(r.qty || 0));
-    }
-  }
-  return refs;
-}
-
-function activeQuickProductionItems(store, refId) {
-  const refs = quickProductionOutstandingByRef(store);
-  const rec = refs[String(refId || '')];
-  if (!rec) return [];
-  return Object.values(rec.products || {}).map(x => ({
-    product: x.product,
-    unit: x.unit,
-    qty: Math.max(0, Number(x.qty || 0) - Number(x.adjusted || 0) - Number(x.reversed || 0))
-  })).filter(x => x.product && x.qty > 0);
-}
-
-function adjustQuickProductionOutstanding(store, product, qtyToAdjust) {
-  const name = productName(product);
-  let remaining = Math.max(0, Number(qtyToAdjust || 0));
-  if (!name || remaining <= 0) return { adjusted: 0, refs: [] };
-  const refs = quickProductionOutstandingByRef(store);
-  const entries = (Array.isArray(store.quickProductions) ? store.quickProductions : [])
-    .slice()
-    .sort((a,b)=>String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
-  const t = today();
-  const adjustedRefs = [];
-  for (const e of entries) {
-    if (!e || e.reversed || e.adjusted) continue;
-    const id = String(e.id || '');
-    const prodRec = refs[id]?.products?.[name];
-    const open = prodRec ? Math.max(0, Number(prodRec.qty || 0) - Number(prodRec.adjusted || 0) - Number(prodRec.reversed || 0)) : 0;
-    if (open <= 0) continue;
-    const q = Math.min(open, remaining);
-    if (q <= 0) continue;
-    const productRow = store.products?.[name] || {};
-    const current = Number(productRow.available || 0);
-    addStockLedger(store, name, 'QUICK_PRODUCTION_ADJUST', q, current, current, `Final stock entry adjusted quick production ${id}`, id);
-    adjustedRefs.push({ id, qty: q });
-    remaining -= q;
-    if (remaining <= 0) break;
-  }
-  return { adjusted: Math.max(0, Number(qtyToAdjust || 0) - remaining), refs: adjustedRefs };
-}
-
 function username(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
 }
@@ -421,16 +353,6 @@ function today() {
   const d = new Date();
   return { date: d.toISOString().slice(0, 10), time: d.toTimeString().slice(0, 5), iso: d.toISOString() };
 }
-function nextProductSortOrder(store) {
-  const nums = Object.values(store.products || {}).map(p => Number(p && p.sortOrder || 0)).filter(n => Number.isFinite(n) && n > 0);
-  return nums.length ? Math.max(...nums) + 1 : Object.keys(store.products || {}).length + 1;
-}
-function ensureProductSortOrders(store) {
-  let next = nextProductSortOrder(store);
-  Object.keys(store.products || {}).sort((a,b)=>a.localeCompare(b)).forEach(name => {
-    if (!Number(store.products[name].sortOrder || 0)) store.products[name].sortOrder = next++;
-  });
-}
 
 function normalizeStore(input) {
   const out = emptyStore();
@@ -450,8 +372,7 @@ function normalizeStore(input) {
         conversion: conversionValue(item.conversion || item.conversionRate || item['1 Alt Unit = Base Qty'] || item['Conversion']),
         available: Math.max(0, Number(item.available || item.stock || 0)),
         lastStatus: String(item.lastStatus || item.last_status || 'Imported'),
-        updatedAt: item.updatedAt || item.updated_at || today().iso,
-        sortOrder: Number(item.sortOrder || item.sort_order || item.sequence || item.order || 0) || 0
+        updatedAt: item.updatedAt || item.updated_at || today().iso
       };
     }
   }
@@ -660,83 +581,6 @@ function updateStore(mutator) {
   return writeQueue;
 }
 
-
-function normalizeQuickProductions(entries, ledger) {
-  const out = [];
-  const seen = new Set();
-  const source = Array.isArray(entries) ? entries : [];
-  for (const e of source) {
-    if (!e || !e.id) continue;
-    const id = String(e.id);
-    seen.add(id);
-    out.push({
-      id,
-      date: String(e.date || '').slice(0,10),
-      time: String(e.time || '').slice(0,5),
-      createdAt: e.createdAt || `${String(e.date || '')}T${String(e.time || '00:00')}:00`,
-      orderIds: Array.isArray(e.orderIds) ? e.orderIds.map(x => String(x)) : [],
-      selectedOrders: Array.isArray(e.selectedOrders) ? e.selectedOrders.map(o => ({
-        id: String(o.id || ''),
-        party: String(o.party || ''),
-        salesman: String(o.salesman || o.bookedBy || ''),
-        date: String(o.date || ''),
-        priority: String(o.priority || '')
-      })) : [],
-      mode: String(e.mode || ''),
-      note: String(e.note || ''),
-      pendingItems: Array.isArray(e.pendingItems) ? e.pendingItems.map(i => ({
-        product: productName(i.product),
-        qty: Math.max(0, Number(i.qty || 0)),
-        unit: productUnit(i.unit || 'PCS'),
-        category: productName(i.category || 'MAIN') || 'MAIN',
-        parties: Array.isArray(i.parties) ? i.parties.map(p => String(p)).filter(Boolean) : []
-      })).filter(i => i.product && i.qty > 0) : [],
-      items: Array.isArray(e.items) ? e.items.map(i => ({
-        product: productName(i.product),
-        qty: Math.max(0, Number(i.qty || 0)),
-        unit: productUnit(i.unit || 'PCS'),
-        opening: Number(i.opening || 0),
-        closing: Number(i.closing || 0)
-      })).filter(i => i.product && i.qty > 0) : [],
-      reversed: !!(e.reversed || e.adjusted),
-      adjusted: !!(e.reversed || e.adjusted),
-      reversedAt: e.reversedAt || null,
-      reverseNote: e.reverseNote || '',
-      activeItems: activeQuickProductionItems({ stockLedger: ledger, products: {} , quickProductions: source }, id),
-      source: 'saved'
-    });
-  }
-  const group = {};
-  const reversedRefs = new Set();
-  for (const r of (Array.isArray(ledger) ? ledger : [])) {
-    const type = String(r.type || '').toUpperCase();
-    const refId = String(r.refId || '').trim();
-    if (!refId) continue;
-    if (type === 'QUICK_PRODUCTION_REVERSE') reversedRefs.add(refId);
-    if (type !== 'QUICK_PRODUCTION' || seen.has(refId)) continue;
-    const q = Math.max(0, Number(r.qty || 0));
-    if (q <= 0) continue;
-    if (!group[refId]) group[refId] = { id: refId, date: r.date || '', time: r.time || '', createdAt: r.createdAt || '', orderIds: [], selectedOrders: [], mode: '', note: r.note || '', pendingItems: [], items: [] };
-    group[refId].items.push({ product: productName(r.product), qty: q, unit: productUnit(r.unit || 'PCS'), opening: Number(r.opening || 0), closing: Number(r.closing || 0) });
-    if (!group[refId].createdAt || String(r.createdAt || '') < String(group[refId].createdAt || '')) {
-      group[refId].date = r.date || group[refId].date;
-      group[refId].time = r.time || group[refId].time;
-      group[refId].createdAt = r.createdAt || group[refId].createdAt;
-      group[refId].note = r.note || group[refId].note;
-    }
-  }
-  for (const e of Object.values(group)) {
-    e.reversed = reversedRefs.has(e.id);
-    e.adjusted = e.reversed;
-    e.reversedAt = e.reversed ? 'Reversed in stock ledger' : null;
-    e.reverseNote = e.reversed ? 'Reversed from stock ledger' : '';
-    e.activeItems = activeQuickProductionItems({ stockLedger: ledger, products: {}, quickProductions: Object.values(group) }, e.id);
-    e.source = 'ledgerFallback';
-    out.push(e);
-  }
-  return out.sort((a,b)=>String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 1000);
-}
-
 function sanitize(store) {
   return {
     products: store.products || {},
@@ -745,7 +589,6 @@ function sanitize(store) {
     salesmen: Object.keys(store.salesmen || {}).sort().map((u) => ({ username: u, createdAt: store.salesmen[u].createdAt || null, targets: normalizeTargets(store.salesmen[u].targets || {}) })),
     vardana: normalizeVardana(store.vardana || {}),
     stockLedger: normalizeStockLedger(store.stockLedger || []),
-    quickProductions: normalizeQuickProductions(store.quickProductions || [], store.stockLedger || []),
     adminUsers: sanitizeAdminUsers(store.adminUsers || {}),
     rolePermissions: normalizeRolePermissions(store.rolePermissions || {}),
     meta: store.meta || {}
@@ -980,21 +823,6 @@ async function handleApi(req, res, url) {
     const b = await body(req);
     const items = Array.isArray(b.items) ? b.items : [];
     const orderIds = Array.isArray(b.orderIds) ? b.orderIds.map(x => String(x)) : [];
-    const selectedOrders = Array.isArray(b.selectedOrders) ? b.selectedOrders.map(o => ({
-      id: String(o.id || ''),
-      party: String(o.party || ''),
-      salesman: String(o.salesman || o.bookedBy || ''),
-      date: String(o.date || ''),
-      priority: String(o.priority || '')
-    })) : [];
-    const pendingItems = Array.isArray(b.pendingItems) ? b.pendingItems.map(i => ({
-      product: productName(i.product),
-      qty: Math.max(0, Number(i.qty || 0)),
-      unit: productUnit(i.unit || 'PCS'),
-      category: productName(i.category || 'MAIN') || 'MAIN',
-      parties: Array.isArray(i.parties) ? i.parties.map(p => String(p)).filter(Boolean) : []
-    })).filter(i => i.product && i.qty > 0) : [];
-    const mode = String(b.mode || 'SELECTED_ONLY').toUpperCase();
     const note = String(b.note || 'Quick production from selected pending orders').trim();
     if (!items.length) return bad(res, 'Quick production ke liye pending item list required');
     const clean = [];
@@ -1022,61 +850,9 @@ async function handleApi(req, res, url) {
         addStockLedger(store, row.product, 'QUICK_PRODUCTION', row.qty, opening, closing, note, batchId);
         details.push({ product: row.product, qty: row.qty, unit: store.products[row.product].unit, opening, closing });
       }
-      store.quickProductions.unshift({ id: batchId, date: t.date, time: t.time, createdAt: t.iso, orderIds, selectedOrders, pendingItems, mode, note, items: details, adjusted: false });
+      store.quickProductions.unshift({ id: batchId, date: t.date, time: t.time, createdAt: t.iso, orderIds, note, items: details, adjusted: false });
       if (store.quickProductions.length > 1000) store.quickProductions = store.quickProductions.slice(0, 1000);
     });
-    return okState(res);
-  }
-
-  if (m === 'POST' && p === '/api/production/quick-reverse') {
-    if (!need(req, res, ['admin'])) return;
-    const b = await body(req);
-    const id = String(b.id || '').trim();
-    if (!id) return bad(res, 'Quick production id required');
-    let reverseError = '';
-    await updateStore((store) => {
-      const t = today();
-      if (!Array.isArray(store.quickProductions)) store.quickProductions = [];
-      let entry = store.quickProductions.find(x => String(x.id || '') === id);
-      if (!entry) {
-        const ledgerItems = (Array.isArray(store.stockLedger) ? store.stockLedger : []).filter(r => String(r.refId || '') === id && String(r.type || '').toUpperCase() === 'QUICK_PRODUCTION' && Number(r.qty || 0) > 0);
-        const alreadyReversed = (Array.isArray(store.stockLedger) ? store.stockLedger : []).some(r => String(r.refId || '') === id && String(r.type || '').toUpperCase() === 'QUICK_PRODUCTION_REVERSE');
-        if (!ledgerItems.length) { reverseError = 'Quick production entry nahi mili'; return; }
-        if (alreadyReversed) { reverseError = 'Ye entry already reversed hai'; return; }
-        entry = { id, items: ledgerItems.map(r => ({ product: r.product, qty: Math.max(0, Number(r.qty || 0)), unit: r.unit || 'PCS' })), note: ledgerItems[0].note || '' };
-        store.quickProductions.unshift(entry);
-      }
-      if (entry.reversed || entry.adjusted) { reverseError = 'Ye entry already reversed hai'; return; }
-      const items = Array.isArray(entry.items) ? entry.items : [];
-      for (const item of items) {
-        const product = productName(item.product);
-        const qtyToReverse = Math.max(0, Number(item.qty || 0));
-        if (!product || qtyToReverse <= 0) continue;
-        const productRow = store.products && store.products[product];
-        const available = Number(productRow?.available || 0);
-        if (available < qtyToReverse) {
-          reverseError = `${product} ka stock ${available} hai, reverse qty ${qtyToReverse} hai. Pehle manual adjustment check karo.`;
-          return;
-        }
-      }
-      for (const item of items) {
-        const product = productName(item.product);
-        const qtyToReverse = Math.max(0, Number(item.qty || 0));
-        if (!product || qtyToReverse <= 0) continue;
-        if (!store.products[product]) continue;
-        const opening = Number(store.products[product].available || 0);
-        const closing = opening - qtyToReverse;
-        store.products[product].available = closing;
-        store.products[product].lastStatus = `Quick Production Reverse -${qtyToReverse}`;
-        store.products[product].updatedAt = t.iso;
-        addStockLedger(store, product, 'QUICK_PRODUCTION_REVERSE', -qtyToReverse, opening, closing, `Reverse quick production ${id}`, id);
-      }
-      entry.reversed = true;
-      entry.adjusted = true;
-      entry.reversedAt = t.iso;
-      entry.reverseNote = 'Reversed from Quick Production History';
-    });
-    if (reverseError) return bad(res, reverseError);
     return okState(res);
   }
 
@@ -1089,7 +865,7 @@ async function handleApi(req, res, url) {
     const type = String(b.type || 'IN').toUpperCase();
     if (!name || Number.isNaN(qty) || qty < 0) return bad(res, 'Product and valid quantity required');
     await updateStore((store) => {
-      if (!store.products[name]) store.products[name] = { name, location, unit: 'PCS', available: 0, sortOrder: nextProductSortOrder(store), lastStatus: '', updatedAt: today().iso };
+      if (!store.products[name]) store.products[name] = { name, location, unit: 'PCS', available: 0, lastStatus: '', updatedAt: today().iso };
       store.products[name].location = location;
       const opening = Number(store.products[name].available || 0);
       let closing = opening;
@@ -1099,12 +875,10 @@ async function handleApi(req, res, url) {
         store.products[name].lastStatus = '-' + qty + ' Out';
         addStockLedger(store, name, 'OUT', -(opening - closing), opening, closing, 'Manual stock out');
       } else {
-        const qpAdjust = adjustQuickProductionOutstanding(store, name, qty);
-        const actualIn = Math.max(0, qty - Number(qpAdjust.adjusted || 0));
-        closing = Math.max(0, opening + actualIn);
+        closing = Math.max(0, opening + qty);
         store.products[name].available = closing;
-        store.products[name].lastStatus = qpAdjust.adjusted > 0 ? `+${actualIn} In, ${qpAdjust.adjusted} Quick adjusted` : '+' + qty + ' In';
-        if (actualIn > 0) addStockLedger(store, name, 'IN', actualIn, opening, closing, 'Manual stock in');
+        store.products[name].lastStatus = '+' + qty + ' In';
+        addStockLedger(store, name, 'IN', closing - opening, opening, closing, 'Manual stock in');
       }
       store.products[name].updatedAt = today().iso;
     });
@@ -1129,7 +903,7 @@ async function handleApi(req, res, url) {
         const altUnit = productAltUnit(raw.altUnit || raw.AltUnit || raw['Alt Unit'] || raw['Alternate Unit'] || (store.products[name] && store.products[name].altUnit) || '');
         const conversion = conversionValue(raw.conversion || raw.Conversion || raw['1 Alt Unit = Base Qty'] || (store.products[name] && store.products[name].conversion) || 0);
         const opening = Number(store.products[name] && store.products[name].available || 0);
-        store.products[name] = { name, location, unit, altUnit, conversion, available, sortOrder: (store.products[name] && store.products[name].sortOrder) || nextProductSortOrder(store), lastStatus: 'Imported from Excel', updatedAt: today().iso };
+        store.products[name] = { name, location, unit, altUnit, conversion, available, lastStatus: 'Imported from Excel', updatedAt: today().iso };
         if (opening !== available) addStockLedger(store, name, 'IMPORT', available - opening, opening, available, 'Product Excel import');
       }
     });
@@ -1176,34 +950,10 @@ async function handleApi(req, res, url) {
           conversion,
           available,
           lastStatus: 'Imported from Excel',
-          updatedAt: today().iso,
-          sortOrder: (store.products[name] && store.products[name].sortOrder) || nextProductSortOrder(store)
+          updatedAt: today().iso
         };
         if (opening !== available) addStockLedger(store, name, 'IMPORT', available - opening, opening, available, 'Product bulk import');
       }
-    });
-    return okState(res);
-  }
-
-
-  if (m === 'POST' && p === '/api/products/reorder') {
-    if (!need(req, res, ['admin'])) return;
-    const b = await body(req);
-    const order = Array.isArray(b.order) ? b.order.map(productName).filter(Boolean) : [];
-    if (!order.length) return bad(res, 'Product order required');
-    await updateStore((store) => {
-      ensureProductSortOrders(store);
-      const seen = new Set();
-      let pos = 1;
-      order.forEach(name => {
-        if (store.products[name] && !seen.has(name)) {
-          store.products[name].sortOrder = pos++;
-          seen.add(name);
-        }
-      });
-      Object.keys(store.products || {}).sort((a,b)=>Number(store.products[a].sortOrder||0)-Number(store.products[b].sortOrder||0) || a.localeCompare(b)).forEach(name => {
-        if (!seen.has(name)) store.products[name].sortOrder = pos++;
-      });
     });
     return okState(res);
   }
@@ -1225,7 +975,6 @@ async function handleApi(req, res, url) {
         const closing = Math.max(0, Number(b.available ?? 0));
         store.products[name].available = closing;
         store.products[name].lastStatus = 'Manual edit';
-        store.products[name].sortOrder = Number(b.sortOrder || store.products[name].sortOrder || 0) || nextProductSortOrder(store);
         store.products[name].updatedAt = today().iso;
         if (opening !== closing) addStockLedger(store, name, 'EDIT', closing - opening, opening, closing, 'Manual product edit');
       });
@@ -1499,7 +1248,7 @@ async function handleApi(req, res, url) {
       const t = today();
       const bookedBy = a.role === 'salesman' ? username(a.user) : String(b.salesman || 'OFFICE ADMIN').trim() || 'OFFICE ADMIN';
       for (const item of items) {
-        if (!store.products[item.product]) store.products[item.product] = { name: item.product, location: 'MAIN', unit: 'PCS', available: 0, sortOrder: nextProductSortOrder(store), lastStatus: 'Auto added from order', updatedAt: t.iso };
+        if (!store.products[item.product]) store.products[item.product] = { name: item.product, location: 'MAIN', unit: 'PCS', available: 0, lastStatus: 'Auto added from order', updatedAt: t.iso };
       }
       if (!store.parties.includes(party)) store.parties.push(party);
       store.orders.unshift({ id: crypto.randomUUID(), party, salesman: bookedBy, date: t.date, time: t.time, status: 'Pending', items, priority: 'Normal', createdAt: t.iso, deliveredDate: null });
@@ -1516,7 +1265,7 @@ async function handleApi(req, res, url) {
       if (!order) throw new Error('Order not found');
       if (status(order.status) === 'Delivered') return;
       for (const item of order.items || []) {
-        if (!store.products[item.product]) store.products[item.product] = { name: item.product, location: 'MAIN', unit: 'PCS', available: 0, sortOrder: nextProductSortOrder(store), lastStatus: '', updatedAt: today().iso };
+        if (!store.products[item.product]) store.products[item.product] = { name: item.product, location: 'MAIN', unit: 'PCS', available: 0, lastStatus: '', updatedAt: today().iso };
         const opening = Number(store.products[item.product].available || 0);
         const closing = Math.max(0, opening - Number(item.qty || 0));
         store.products[item.product].available = closing;
@@ -1568,15 +1317,11 @@ async function handleApi(req, res, url) {
       }
       const t = today();
       for (const item of items) {
-        if (!store.products[item.product]) store.products[item.product] = { name: item.product, location: 'MAIN', unit: 'PCS', available: 0, sortOrder: nextProductSortOrder(store), lastStatus: 'Auto added from order edit', updatedAt: t.iso };
+        if (!store.products[item.product]) store.products[item.product] = { name: item.product, location: 'MAIN', unit: 'PCS', available: 0, lastStatus: 'Auto added from order edit', updatedAt: t.iso };
       }
       if (!store.parties.includes(party)) store.parties.push(party);
       order.party = party;
       order.items = items;
-      if (a.role === 'admin') {
-        const bookedBy = String(b.salesman || order.salesman || 'OFFICE ADMIN').trim() || 'OFFICE ADMIN';
-        order.salesman = bookedBy;
-      }
       order.updatedAt = t.iso;
     });
     return okState(res);

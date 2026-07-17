@@ -3,8 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
-let activeMisTab = localStorage.getItem('niharo_mis_tab') || 'overview';
-let state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], quickProductions: [], adminUsers: [], rolePermissions: {}, meta: {} };
+let state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], adminUsers: [], rolePermissions: {}, meta: {} };
 let adminToken = localStorage.getItem('niharo_admin_token') || '';
 let adminUser = localStorage.getItem('niharo_admin_user') || '';
 let adminRole = localStorage.getItem('niharo_admin_role') || '';
@@ -52,7 +51,7 @@ function applyActionPermissions() {
   [
     ['stockName','inventory','edit'], ['stockLocation','inventory','edit'], ['stockQty','inventory','edit'], ['stockType','inventory','edit'],
     ['downloadProductFormatBtn','inventory','export'], ['importProductsBtn','inventory','edit'],
-    ['openParserBtn','orders','edit'], ['quickProductionSelectedBtn','inventory','edit'], ['viewQuickProductionBtn','inventory','view'], ['orderParty','orders','edit'], ['orderSalesman','orders','edit'], ['orderProduct','orders','edit'], ['orderQty','orders','edit'], ['orderRate','orders','edit'], ['submitOfficeOrderBtn','orders','edit'],
+    ['openParserBtn','orders','edit'], ['quickProductionSelectedBtn','inventory','edit'], ['orderParty','orders','edit'], ['orderProduct','orders','edit'], ['orderQty','orders','edit'], ['orderRate','orders','edit'], ['submitOfficeOrderBtn','orders','edit'],
     ['vardanaMaterialName','vardana','edit'], ['vardanaMaterialUnit','vardana','edit'], ['vardanaMaterialStock','vardana','edit'], ['vardanaMaterialLow','vardana','edit'],
     ['vardanaRecipeProduct','vardana','edit'], ['vardanaRecipeOutputQty','vardana','edit'], ['vardanaRecipeLines','vardana','edit'], ['vardanaProductionProduct','vardana','edit'], ['vardanaProductionQty','vardana','edit'],
     ['downloadPartyFormatBtn','masters','export'], ['importPartiesBtn','masters','edit'], ['partyName','masters','edit'], ['salesmanName','masters','edit'], ['salesmanPass','masters','edit'],
@@ -81,9 +80,7 @@ function isPending(order) { return String(order.status || '').toLowerCase().incl
 function isDelivered(order) { return String(order.status || '').toLowerCase().includes('delivered'); }
 function orderTotal(order) { return (order.items || []).reduce((s, i) => s + Number(i.qty || 0) * Number(i.rate || 0), 0); }
 function findOrder(orderId) { return (state.orders || []).find(o => String(o.id) === String(orderId)); }
-function productSequenceValue(name) { const n = Number((state.products || {})[name]?.sortOrder || 0); return Number.isFinite(n) && n > 0 ? n : 999999; }
-function compareProductsBySequence(a, b) { const da = productSequenceValue(a), db = productSequenceValue(b); return da - db || String(a).localeCompare(String(b)); }
-function productKeys() { return Object.keys(state.products || {}).sort(compareProductsBySequence); }
+function productKeys() { return Object.keys(state.products || {}).sort((a,b)=>a.localeCompare(b)); }
 function filteredText(...parts) { return parts.join(' ').toLowerCase().includes(($('globalSearch').value || '').trim().toLowerCase()); }
 function toast(message, type = '') { const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = message; $('toastStack').appendChild(el); setTimeout(() => el.remove(), 3600); }
 
@@ -98,7 +95,6 @@ function normalizeState(raw) {
     salesmen,
     vardana: normalizeVardanaClient(raw.vardana || {}),
     stockLedger: Array.isArray(raw.stockLedger || raw.inventoryLedger) ? (raw.stockLedger || raw.inventoryLedger) : [],
-    quickProductions: Array.isArray(raw.quickProductions) ? raw.quickProductions : [],
     adminUsers: Array.isArray(raw.adminUsers) ? raw.adminUsers : [],
     rolePermissions: raw.rolePermissions || defaultClientRolePermissions(),
     meta: raw.meta || {}
@@ -139,7 +135,7 @@ async function api(path, options = {}) {
 async function loadState() {
   if (!adminToken) {
     updateAuthLock();
-    state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], quickProductions: [], adminUsers: [], rolePermissions: {}, meta: {} };
+    state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], adminUsers: [], rolePermissions: {}, meta: {} };
     setLive(true);
     renderAll();
     showLogin(true);
@@ -253,11 +249,9 @@ function renderDropdowns() {
   if ($('productSuggestions')) $('productSuggestions').innerHTML = productKeys().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(productCategory(p))} | ${escapeHtml(productUnit(p))} | Stock ${Number(state.products[p]?.available || 0)}</option>`).join('');
   const salesmanNames = [...new Set([...(state.salesmen || []).map(s => s.username), ...(state.orders || []).map(o => o.salesman).filter(Boolean)])].sort();
   const salesmanOptions = ['<option value="ALL">All salesmen</option>', ...salesmanNames.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(String(s).toUpperCase())}</option>`)].join('');
-  const orderSalesmanOptions = ['<option value="OFFICE ADMIN">OFFICE ADMIN</option>', ...salesmanNames.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(String(s).toUpperCase())}</option>`)].join('');
-  preserveSelect($('orderParty'), partyOptions); preserveSelect($('orderProduct'), productOptions); preserveSelect($('orderSalesman'), orderSalesmanOptions); preserveSelect($('filterSalesman'), salesmanOptions); preserveSelect($('reportSalesman'), salesmanOptions);
+  preserveSelect($('orderParty'), partyOptions); preserveSelect($('orderProduct'), productOptions); preserveSelect($('filterSalesman'), salesmanOptions); preserveSelect($('reportSalesman'), salesmanOptions);
   preserveSelect($('reportParty'), ['<option value="ALL">All parties</option>', ...state.parties.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`)].join(''));
   preserveSelect($('reportProduct'), ['<option value="ALL">All products</option>', ...productKeys().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`)].join(''));
-  if ($('reportCategory')) preserveSelect($('reportCategory'), ['<option value="ALL">All categories</option>', ...categories().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)].join(''));
   if ($('targetSalesmanFilter')) preserveSelect($('targetSalesmanFilter'), ['<option value="ALL">All salesmen</option>', ...salesmanNames.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(String(s).toUpperCase())}</option>`)].join(''));
   if ($('targetSetSalesman')) preserveSelect($('targetSetSalesman'), ['<option value="">Select salesman</option>', ...salesmanNames.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(String(s).toUpperCase())}</option>`)].join(''));
   if ($('inventoryCategoryFilter')) preserveSelect($('inventoryCategoryFilter'), ['<option value="ALL">All categories</option>', ...categories().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)].join(''));
@@ -291,7 +285,6 @@ window.cancelOfficeOrderEdit = () => {
   editingOrderId = '';
   cart = [];
   if ($('orderParty')) $('orderParty').value = '';
-  if ($('orderSalesman')) $('orderSalesman').value = 'OFFICE ADMIN';
   renderCart();
   toast('Edit cancelled');
 };
@@ -310,7 +303,6 @@ window.startOrderEdit = (orderId) => {
   if ($('pageTitle')) $('pageTitle').textContent = 'Warehouse dashboard';
   if ($('pageSubtitle')) $('pageSubtitle').textContent = 'Inventory, pending orders, dispatch aur MIS ek jagah.';
   if ($('orderParty')) $('orderParty').value = order.party || '';
-  if ($('orderSalesman')) $('orderSalesman').value = order.salesman || 'OFFICE ADMIN';
   renderCart();
   setTimeout(() => $('orderParty')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   toast('Pending order edit mode open ho gaya', 'success');
@@ -394,13 +386,14 @@ window.openProductHistory = (encoded) => {
   $('inventoryHistoryCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
-function inventoryFilteredProducts(sortFilter = null) {
+function renderInventory() {
   const catFilter = $('inventoryCategoryFilter') ? $('inventoryCategoryFilter').value || 'ALL' : 'ALL';
   const stockFilter = $('inventoryStockFilter') ? $('inventoryStockFilter').value || 'ALL' : 'ALL';
-  const activeSort = sortFilter || ($('inventorySortFilter') ? $('inventorySortFilter').value || 'CUSTOM' : 'CUSTOM');
+  const sortFilter = $('inventorySortFilter') ? $('inventorySortFilter').value || 'NAME_ASC' : 'NAME_ASC';
   let items = productKeys().filter(p => {
     const prod = state.products[p] || {};
     const available = Number(prod.available || 0);
+    const demand = productDemand(p);
     const short = productShortage(p);
     if (!filteredText(p, prod.location)) return false;
     if (catFilter !== 'ALL' && productCategory(p) !== catFilter) return false;
@@ -413,50 +406,12 @@ function inventoryFilteredProducts(sortFilter = null) {
   const metrics = p => ({ prod: state.products[p] || {}, available: Number(state.products[p]?.available || 0), demand: productDemand(p), short: productShortage(p) });
   items.sort((a, b) => {
     const ma = metrics(a), mb = metrics(b);
-    if (activeSort === 'CUSTOM') return compareProductsBySequence(a,b);
-    if (activeSort === 'STOCK_DESC') return mb.available - ma.available || compareProductsBySequence(a,b);
-    if (activeSort === 'STOCK_ASC') return ma.available - mb.available || compareProductsBySequence(a,b);
-    if (activeSort === 'DEMAND_DESC') return mb.demand - ma.demand || compareProductsBySequence(a,b);
-    if (activeSort === 'SHORTAGE_DESC') return mb.short - ma.short || compareProductsBySequence(a,b);
-    return String(a).localeCompare(String(b));
+    if (sortFilter === 'STOCK_DESC') return mb.available - ma.available || a.localeCompare(b);
+    if (sortFilter === 'STOCK_ASC') return ma.available - mb.available || a.localeCompare(b);
+    if (sortFilter === 'DEMAND_DESC') return mb.demand - ma.demand || a.localeCompare(b);
+    if (sortFilter === 'SHORTAGE_DESC') return mb.short - ma.short || a.localeCompare(b);
+    return a.localeCompare(b);
   });
-  return items;
-}
-
-let inventoryDragSource = '';
-window.inventoryDragStart = (ev, encoded) => { inventoryDragSource = decodeURIComponent(encoded); ev.dataTransfer.effectAllowed = 'move'; ev.currentTarget.classList.add('dragging-row'); };
-window.inventoryDragOver = (ev) => { ev.preventDefault(); ev.currentTarget.classList.add('drag-over-row'); };
-window.inventoryDragLeave = (ev) => { ev.currentTarget.classList.remove('drag-over-row'); };
-window.inventoryDragEnd = (ev) => { ev.currentTarget.classList.remove('dragging-row'); $$('.drag-over-row').forEach(x => x.classList.remove('drag-over-row')); };
-window.inventoryDrop = async (ev, encodedTarget) => {
-  ev.preventDefault();
-  $$('.drag-over-row').forEach(x => x.classList.remove('drag-over-row'));
-  const target = decodeURIComponent(encodedTarget);
-  const source = inventoryDragSource;
-  inventoryDragSource = '';
-  if (!source || !target || source === target) return;
-  if (!requirePerm('inventory','edit')) return;
-  if ($('inventorySortFilter')) $('inventorySortFilter').value = 'CUSTOM';
-  const visible = inventoryFilteredProducts('CUSTOM');
-  const from = visible.indexOf(source);
-  const to = visible.indexOf(target);
-  if (from < 0 || to < 0) return;
-  visible.splice(to, 0, visible.splice(from, 1)[0]);
-  const all = productKeys();
-  const visibleSet = new Set(visible);
-  let v = 0;
-  const newOrder = all.map(p => visibleSet.has(p) ? visible[v++] : p);
-  try {
-    const data = await api('/api/products/reorder', { method: 'POST', body: { order: newOrder } });
-    state = normalizeState(data.state || data.data);
-    renderAll();
-    toast('Product sequence locked. Reports/export mein bhi yahi order rahega.', 'success');
-  } catch(e) { toast(e.message, 'error'); renderInventory(); }
-};
-
-function renderInventory() {
-  const sortFilter = $('inventorySortFilter') ? $('inventorySortFilter').value || 'CUSTOM' : 'CUSTOM';
-  let items = inventoryFilteredProducts(sortFilter);
   if ($('inventorySummary')) $('inventorySummary').textContent = `${items.length} of ${productKeys().length} products`;
   const rows = items.map(p => {
     const prod = state.products[p] || {};
@@ -469,9 +424,9 @@ function renderInventory() {
     const conv = productConv(p);
     const encoded = encodeURIComponent(p);
     const convCell = `<div class="conversion-mini"><select class="unit-mini" ${permDisabled('inventory','edit')} onchange="updateProductConversion('${encoded}', this.value, this.parentElement.querySelector('input').value)"><option value="">None</option>${PRODUCT_UNITS.map(u => `<option value="${u}" ${u===altUnit?'selected':''}>${u}</option>`).join('')}</select><small>1 =</small><input type="number" step="0.0001" min="0" value="${conv || ''}" ${permDisabled('inventory','edit')} onchange="updateProductConversion('${encoded}', this.parentElement.querySelector('select').value, this.value)"><small>${escapeHtml(unit)}</small></div><div class="unit-conv-note">${escapeHtml(conversionText(p))}</div>`;
-    return `<tr class="product-sequence-row" draggable="true" ondragstart="inventoryDragStart(event,'${encoded}')" ondragover="inventoryDragOver(event)" ondragleave="inventoryDragLeave(event)" ondrop="inventoryDrop(event,'${encoded}')" ondragend="inventoryDragEnd(event)"><td><span class="drag-handle" title="Drag to set sequence">☰</span><div class="seq-no">${Number(prod.sortOrder || 0) || ''}</div></td><td><b>${escapeHtml(p)}</b><br><span style="color:var(--muted);font-size:12px">${escapeHtml(prod.lastStatus || '')}</span></td><td><span class="badge badge-blue">${escapeHtml(productCategory(p))}</span></td><td><select class="unit-mini" ${permDisabled('inventory','edit')} onchange="updateProductUnit('${encoded}', this.value)">${unitOptions(unit)}</select></td><td>${convCell}</td><td><b style="font-size:17px;color:${stockColor}">${qty(available)} ${escapeHtml(unit)}</b>${hasConversion(p) ? `<div class="unit-conv-note">≈ ${qty(baseToAlt(p, available))} ${escapeHtml(altUnit)}</div>` : ''}</td><td>${qty(demand)} ${escapeHtml(unit)}${hasConversion(p) ? `<div class="unit-conv-note">≈ ${qty(baseToAlt(p, demand))} ${escapeHtml(altUnit)}</div>` : ''}</td><td>${short ? `<span class="badge badge-danger">${qty(short)} ${escapeHtml(unit)}</span>` : '<span class="badge badge-success">OK</span>'}</td><td><div class="table-actions"><button class="btn btn-blue btn-sm" onclick="openProductHistory('${encoded}')">History</button><button class="btn btn-soft btn-sm" ${permDisabled('inventory','edit')} onclick="editProduct('${encoded}')">Edit</button><button class="btn btn-danger btn-sm" ${permDisabled('inventory','delete')} onclick="deleteProduct('${encoded}')">Delete</button></div></td></tr>`;
+    return `<tr><td><b>${escapeHtml(p)}</b><br><span style="color:var(--muted);font-size:12px">${escapeHtml(prod.lastStatus || '')}</span></td><td><span class="badge badge-blue">${escapeHtml(productCategory(p))}</span></td><td><select class="unit-mini" ${permDisabled('inventory','edit')} onchange="updateProductUnit('${encoded}', this.value)">${unitOptions(unit)}</select></td><td>${convCell}</td><td><b style="font-size:17px;color:${stockColor}">${qty(available)} ${escapeHtml(unit)}</b>${hasConversion(p) ? `<div class="unit-conv-note">≈ ${qty(baseToAlt(p, available))} ${escapeHtml(altUnit)}</div>` : ''}</td><td>${qty(demand)} ${escapeHtml(unit)}${hasConversion(p) ? `<div class="unit-conv-note">≈ ${qty(baseToAlt(p, demand))} ${escapeHtml(altUnit)}</div>` : ''}</td><td>${short ? `<span class="badge badge-danger">${qty(short)} ${escapeHtml(unit)}</span>` : '<span class="badge badge-success">OK</span>'}</td><td><div class="table-actions"><button class="btn btn-blue btn-sm" onclick="openProductHistory('${encoded}')">History</button><button class="btn btn-soft btn-sm" ${permDisabled('inventory','edit')} onclick="editProduct('${encoded}')">Edit</button><button class="btn btn-danger btn-sm" ${permDisabled('inventory','delete')} onclick="deleteProduct('${encoded}')">Delete</button></div></td></tr>`;
   }).join('');
-  $('inventoryBody').innerHTML = rows || '<tr><td colspan="9" class="empty-state">No products found</td></tr>';
+  $('inventoryBody').innerHTML = rows || '<tr><td colspan="8" class="empty-state">No products found</td></tr>';
 }
 window.editProduct = async (encoded) => { if (!requirePerm('inventory','edit')) return; const name = decodeURIComponent(encoded); const product = state.products[name]; const location = prompt('Category', product.location || 'MAIN'); if (location === null) return; const available = prompt('Available stock', product.available); if (available === null) return; const unit = prompt('Base Unit: PCS / KG / BOX / BAG / LITER / CARTON', product.unit || 'PCS'); if (unit === null) return; const altUnit = prompt('Alternate Unit (blank for none): PCS / KG / BOX / BAG / LITER / CARTON', product.altUnit || ''); if (altUnit === null) return; const conversion = altUnit ? prompt(`1 ${String(altUnit).toUpperCase()} = kitna ${String(unit).toUpperCase()}?`, product.conversion || '') : ''; if (conversion === null) return; try { const data = await api('/api/products/' + encodeURIComponent(name), { method: 'PUT', body: { location, available, unit, altUnit, conversion } }); state = normalizeState(data.state || data.data); renderAll(); toast('Product updated', 'success'); } catch (e) { toast(e.message, 'error'); } };
 window.updateProductUnit = async (encoded, unit) => { if (!requirePerm('inventory','edit')) { renderInventory(); return; } const name = decodeURIComponent(encoded); const product = state.products[name]; if (!product) return; try { const data = await api('/api/products/' + encodeURIComponent(name), { method: 'PUT', body: { location: product.location || 'MAIN', available: product.available || 0, unit, altUnit: product.altUnit || '', conversion: product.conversion || 0 } }); state = normalizeState(data.state || data.data); renderAll(); toast('Unit updated', 'success'); } catch(e) { toast(e.message, 'error'); } };
@@ -556,7 +511,7 @@ function dispatchShortTotals(rows) {
     map[key].pending += Number(r.short || r.pending || 0);
     map[key].orders += 1;
   });
-  return Object.values(map).sort((a,b) => String(a.category).localeCompare(String(b.category)) || compareProductsBySequence(a.product, b.product));
+  return Object.values(map).sort((a,b) => String(a.category).localeCompare(String(b.category)) || String(a.product).localeCompare(String(b.product)));
 }
 function groupRowsByCategory(rows) {
   const map = {};
@@ -565,7 +520,7 @@ function groupRowsByCategory(rows) {
     if (!map[cat]) map[cat] = [];
     map[cat].push({ ...r, category: cat });
   });
-  return Object.keys(map).sort((a,b)=>a.localeCompare(b)).map(category => ({ category, rows: map[category].sort((a,b)=>compareProductsBySequence(a.product, b.product) || String(a.party).localeCompare(String(b.party))) }));
+  return Object.keys(map).sort((a,b)=>a.localeCompare(b)).map(category => ({ category, rows: map[category].sort((a,b)=>String(a.product).localeCompare(String(b.product)) || String(a.party).localeCompare(String(b.party))) }));
 }
 function groupTotalsByCategory(rows) {
   const totals = dispatchShortTotals(rows);
@@ -615,272 +570,43 @@ function groupWorkerTotalsByCategory(rows) {
   });
   return Object.keys(grouped).sort((a,b)=>a.localeCompare(b)).map(category => ({
     category,
-    rows: grouped[category].sort((a,b)=>compareProductsBySequence(a.product, b.product))
+    rows: grouped[category].sort((a,b)=>String(a.product).localeCompare(String(b.product)))
   }));
 }
 
 
-function quickProductionRowsForSelected(mode = 'SELECTED_ONLY') {
+function quickProductionRowsForSelected() {
   if (!selectedDispatchOrders.size) return [];
-
-  const selected = new Set(Array.from(selectedDispatchOrders).map(String));
-  const stock = baseStockMap();
-  const needed = {};
-  const orderNames = {};
-  const parties = {};
-
-  if (mode === 'PRIORITY_COVER') {
-    // Priority cover mode: selected order ko current priority/FIFO sequence mein ready karne ke liye
-    // selected order se pehle jo orders stock consume karenge unko bhi cover karta hai.
-    const orders = sortedPendingOrders(currentAllocationMode());
-    const cumulativeDemand = {};
-    orders.forEach(order => {
-      const isSelected = selected.has(String(order.id));
-      (order.items || []).forEach(item => {
-        const product = String(item.product || '').trim();
-        if (!product) return;
-        const demand = Number(item.qty || 0);
-        if (demand <= 0) return;
-        cumulativeDemand[product] = Number(cumulativeDemand[product] || 0) + demand;
-        if (isSelected) {
-          const requiredByThisPoint = Math.max(0, Number(cumulativeDemand[product] || 0) - Number(stock[product] || 0));
-          if (requiredByThisPoint > Number(needed[product] || 0)) needed[product] = requiredByThisPoint;
-          if (!orderNames[product]) orderNames[product] = new Set();
-          if (!parties[product]) parties[product] = new Set();
-          orderNames[product].add(String(order.id));
-          parties[product].add(String(order.party || ''));
-        }
-      });
-    });
-  } else {
-    // Default and safe mode: screen par jo selected order ka current allocation short dikh raha hai,
-    // wahi quick production mein add hoga. Isse selected order ke displayed Short qty se mismatch nahi hoga.
-    // Dusre orders ka full requirement add nahi hota; sirf selected row ke allocation short items add hote hain.
-    const allocRows = buildAllocation(currentAllocationMode());
-    const selectedOrders = sortedPendingOrders(currentAllocationMode()).filter(o => selected.has(String(o.id)));
-    selectedOrders.forEach(order => {
-      const rec = allocRows[order.id] || { items: {} };
-      (order.items || []).forEach(item => {
-        const product = String(item.product || '').trim();
-        if (!product) return;
-        const itemAlloc = rec.items?.[product];
-        const short = Math.max(0, Number(itemAlloc?.short || 0));
-        if (short <= 0) return;
-        needed[product] = Number(needed[product] || 0) + short;
-        if (!orderNames[product]) orderNames[product] = new Set();
-        if (!parties[product]) parties[product] = new Set();
-        orderNames[product].add(String(order.id));
-        parties[product].add(String(order.party || ''));
-      });
-    });
-  }
-
-  return Object.entries(needed)
-    .filter(([product, qtyNeeded]) => product && Number(qtyNeeded || 0) > 0)
-    .map(([product, qtyNeeded]) => ({
-      product,
-      unit: productUnit(product),
-      category: productCategory(product),
-      qty: Number(qtyNeeded || 0),
-      orders: orderNames[product]?.size || 0,
-      parties: Array.from(parties[product] || []).filter(Boolean),
-      reason: mode === 'PRIORITY_COVER' ? 'priority cover mode' : 'selected orders only'
-    }))
-    .sort((a,b)=>String(a.category).localeCompare(String(b.category)) || compareProductsBySequence(a.product, b.product));
+  const sel = currentDispatchSelection();
+  const rows = dispatchRowsForExport(sel);
+  const map = {};
+  rows.forEach(r => {
+    const product = String(r.product || '').trim();
+    const pending = Number(r.pending || r.short || 0);
+    if (!product || pending <= 0) return;
+    if (!map[product]) map[product] = { product, unit: r.unit || productUnit(product), category: r.category || productCategory(product), qty: 0, orders: new Set(), parties: new Set() };
+    map[product].qty += pending;
+    map[product].orders.add(String(r.orderNo || ''));
+    map[product].parties.add(String(r.party || ''));
+  });
+  return Object.values(map).map(x => ({ product: x.product, unit: x.unit, category: x.category, qty: x.qty, orders: x.orders.size, parties: Array.from(x.parties).filter(Boolean) })).sort((a,b)=>String(a.category).localeCompare(String(b.category)) || String(a.product).localeCompare(String(b.product)));
 }
 
 async function quickProductionForSelectedOrders() {
   if (!requirePerm('inventory','edit')) return;
   if (!selectedDispatchOrders.size) return toast('Pehle jis party/order ko complete karna hai uska checkbox tick karo.', 'error');
-
-  const selectedOnlyRows = quickProductionRowsForSelected('SELECTED_ONLY');
-  if (!selectedOnlyRows.length) return toast('Selected orders me pending/short items nahi mile.', 'error');
-
-  let mode = 'SELECTED_ONLY';
-  let rows = selectedOnlyRows;
-  const priorityRows = quickProductionRowsForSelected('PRIORITY_COVER');
-  const selectedPreview = selectedOnlyRows.map(r => `${r.product}: ${qty(r.qty)} ${r.unit}`).join('\n');
-  const priorityPreview = priorityRows.map(r => `${r.product}: ${qty(r.qty)} ${r.unit}`).join('\n');
-  const usePriority = priorityRows.length && priorityPreview !== selectedPreview && confirm(
-    'Quick Production mode select karein:\n\n' +
-    'OK = Selected Orders Only (recommended)\n' + selectedPreview + '\n\n' +
-    'Cancel = next step mein Priority Cover option milega.'
-  ) === false;
-
-  if (usePriority) {
-    if (confirm('Priority Cover Mode use karna hai?\n\nIsme selected order se pehle priority/FIFO wale orders ki requirement bhi include hogi.\n\n' + priorityPreview)) {
-      mode = 'PRIORITY_COVER';
-      rows = priorityRows;
-    } else {
-      return;
-    }
-  }
-
+  const rows = quickProductionRowsForSelected();
+  if (!rows.length) return toast('Selected orders me pending/short items nahi mile.', 'error');
   const preview = rows.map(r => `${r.product}: ${qty(r.qty)} ${r.unit}`).join('\n');
-  const modeLabel = mode === 'PRIORITY_COVER' ? 'Priority Cover Mode' : 'Selected Orders Only';
-  if (!confirm('Quick Production add karna hai?\n\nMode: ' + modeLabel + '\n\n' + preview + '\n\nSelected Orders Only mein sirf tick kiye hue order/party ki shortage add hogi.')) return;
+  if (!confirm('Selected parties ke pending items ko stock me Quick Production add karna hai?\n\n' + preview + '\n\nIske baad selected orders ready/deliver ho sakenge.')) return;
   try {
-    const snapshot = buildQuickProductionSnapshot(rows, mode);
-    const data = await api('/api/production/quick-selected', { method: 'POST', body: { items: rows.map(r => ({ product: r.product, qty: r.qty, unit: r.unit, category: r.category })), orderIds: Array.from(selectedDispatchOrders), selectedOrders: snapshot.selectedOrders, pendingItems: snapshot.pendingItems, mode, note: 'Quick Production - ' + modeLabel } });
+    const data = await api('/api/production/quick-selected', { method: 'POST', body: { items: rows.map(r => ({ product: r.product, qty: r.qty, unit: r.unit, category: r.category })), orderIds: Array.from(selectedDispatchOrders), note: 'Selected pending orders complete karne ke liye quick production' } });
     state = normalizeState(data.state || data.data);
     selectedDispatchOrders.clear();
     renderAll();
     toast('Quick Production stock add ho gaya. Pending orders recalculated.', 'success');
   } catch(e) { toast(e.message, 'error'); }
 }
-
-
-function buildQuickProductionSnapshot(rows, mode) {
-  const selectedIds = new Set(Array.from(selectedDispatchOrders).map(String));
-  const selectedOrders = sortedPendingOrders(currentAllocationMode())
-    .filter(o => selectedIds.has(String(o.id)))
-    .map(o => ({
-      id: String(o.id || ''),
-      party: String(o.party || ''),
-      salesman: String(o.salesman || o.bookedBy || ''),
-      date: String(o.createdAt || o.date || '').slice(0,16),
-      priority: String(o.priority || '')
-    }));
-  return {
-    mode,
-    selectedOrders,
-    pendingItems: rows.map(r => ({
-      product: r.product,
-      qty: Number(r.qty || 0),
-      unit: r.unit || productUnit(r.product),
-      category: r.category || productCategory(r.product),
-      parties: Array.isArray(r.parties) ? r.parties : []
-    }))
-  };
-}
-function quickProductionOrderIds(h) {
-  const ids = new Set();
-  (Array.isArray(h.orderIds) ? h.orderIds : []).forEach(id => { if (id) ids.add(String(id)); });
-  (Array.isArray(h.selectedOrders) ? h.selectedOrders : []).forEach(o => { if (o && o.id) ids.add(String(o.id)); });
-  return ids;
-}
-function quickProductionOpenRows(h) {
-  if (!h || h.reversed || h.adjusted) return [];
-  // v64: Active ka matlab quick-production stock jo abhi final stock-in se adjust nahi hua.
-  // Order delivered ho gaya ho tab bhi active balance dikhega jab tak final stock entry se settle na ho.
-  if (Array.isArray(h.activeItems) && h.activeItems.length) {
-    return h.activeItems.map(i => ({
-      category: i.category || productCategory(i.product) || 'MAIN',
-      product: i.product,
-      unit: i.unit || productUnit(i.product),
-      qty: Math.max(0, Number(i.qty || 0)),
-      parties: Array.isArray(i.parties) ? i.parties : [],
-      orders: new Set()
-    })).filter(i => i.product && i.qty > 0)
-      .sort((a,b)=>String(a.category).localeCompare(String(b.category)) || compareProductsBySequence(a.product,b.product));
-  }
-  return [];
-}
-let quickProductionHistoryMode = 'active';
-function quickProductionAllRows(h) {
-  if (!h) return [];
-  const source = Array.isArray(h.pendingItems) && h.pendingItems.length ? h.pendingItems : (Array.isArray(h.items) ? h.items : []);
-  const map = {};
-  source.forEach(i => {
-    const product = String(i.product || '').trim();
-    const q = Math.max(0, Number(i.qty || 0));
-    if (!product || q <= 0) return;
-    const unit = i.unit || productUnit(product);
-    const category = i.category || productCategory(product) || 'MAIN';
-    const key = category + '||' + product + '||' + unit;
-    if (!map[key]) map[key] = { category, product, unit, qty: 0, parties: new Set() };
-    map[key].qty += q;
-    (Array.isArray(i.parties) ? i.parties : []).forEach(p => p && map[key].parties.add(String(p)));
-  });
-  return Object.values(map).sort((a,b)=>String(a.category).localeCompare(String(b.category)) || compareProductsBySequence(a.product,b.product));
-}
-function renderQuickProductionItems(h, rows, emptyText) {
-  const source = Array.isArray(rows) ? rows : quickProductionOpenRows(h);
-  if (!source.length) return `<span class="muted">${escapeHtml(emptyText || 'Complete / no current requirement')}</span>`;
-  const grouped = {};
-  source.forEach(i => {
-    const cat = String(i.category || productCategory(i.product) || 'MAIN');
-    if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push(i);
-  });
-  return `<div class="qp-items">${Object.keys(grouped).sort((a,b)=>a.localeCompare(b)).map(cat => {
-    const rowsHtml = grouped[cat].slice().sort((a,b)=>compareProductsBySequence(a.product,b.product)).map(i => {
-      const parties = i.parties instanceof Set ? Array.from(i.parties).filter(Boolean) : (Array.isArray(i.parties) ? i.parties : []);
-      const partiesLine = parties.length ? `<div class="qp-item-sub">Party: ${escapeHtml(parties.join(', '))}</div>` : '';
-      return `<div class="qp-item"><div class="qp-item-main">${escapeHtml(i.product)} — ${qty(i.qty)} ${escapeHtml(i.unit || productUnit(i.product))}</div>${partiesLine}</div>`;
-    }).join('');
-    return `<div><div class="muted" style="font-weight:900;margin:4px 0">${escapeHtml(cat)}</div>${rowsHtml}</div>`;
-  }).join('')}</div>`;
-}
-function renderQuickProductionOrders(h) {
-  const ids = quickProductionOrderIds(h);
-  const ordersFromState = (state.orders || []).filter(o => ids.has(String(o.id)));
-  if (ordersFromState.length) return `<div class="qp-party-list">${ordersFromState.map(o => `<div class="qp-party">${escapeHtml(o.party || '-')}</div><div class="muted">${escapeHtml(o.salesman || o.bookedBy || '')} ${escapeHtml(o.priority ? '· '+o.priority : '')} ${isDelivered(o) ? '· Delivered' : '· Pending'}</div>`).join('')}</div>`;
-  const orders = Array.isArray(h.selectedOrders) ? h.selectedOrders : [];
-  if (orders.length) return `<div class="qp-party-list">${orders.map(o => `<div class="qp-party">${escapeHtml(o.party || '-')}</div><div class="muted">${escapeHtml(o.salesman || '')} ${escapeHtml(o.priority ? '· '+o.priority : '')}</div>`).join('')}</div>`;
-  return '<span class="muted">Old entry / order link not found</span>';
-}
-function quickProductionStatusHtml(h, openRows) {
-  if (h.reversed || h.adjusted) return `<span class="badge badge-light">Reversed</span><br><span class="muted">${escapeHtml(h.reverseNote || h.reversedAt || 'Reversed')}</span>`;
-  if (quickProductionHistoryMode === 'active') return `<span class="badge warn">Pending adjustment</span><br><span class="muted">${qty(openRows.reduce((s,r)=>s+Number(r.qty||0),0))} stock-in balance</span>`;
-  const ids = quickProductionOrderIds(h);
-  const linked = (state.orders || []).filter(o => ids.has(String(o.id)));
-  if (linked.length && linked.every(isDelivered)) return '<span class="badge badge-delivered">Delivered</span>';
-  if (linked.length && linked.some(isPending)) return '<span class="badge warn">Pending order</span>';
-  return '<span class="badge badge-user">Active</span>';
-}
-function renderQuickProductionHistory() {
-  const body = $('quickProductionHistoryBody');
-  if (!body) return;
-  const activeBtn = $('qpActiveTabBtn');
-  const allBtn = $('qpAllTabBtn');
-  if (activeBtn) activeBtn.className = quickProductionHistoryMode === 'active' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
-  if (allBtn) allBtn.className = quickProductionHistoryMode === 'all' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
-  const hint = $('qpHistoryHint');
-  if (hint) hint.textContent = quickProductionHistoryMode === 'active' ? 'Active Requirement mein sirf linked selected-order quick production ka pending adjustment balance dikhega. Old/unlinked entries All History mein rahengi.' : 'All History mein delivered, active aur reversed quick production sab record dikhega.';
-  const allRows = Array.isArray(state.quickProductions) ? state.quickProductions.slice(0, 300) : [];
-  const visible = allRows.map(h => ({ h, openRows: quickProductionOpenRows(h), allItems: quickProductionAllRows(h) }))
-    .filter(x => {
-      if (quickProductionHistoryMode === 'all') return x.allItems.length > 0;
-      const hasOrderLink = quickProductionOrderIds(x.h).size > 0 || (Array.isArray(x.h.selectedOrders) && x.h.selectedOrders.length > 0);
-      const isLedgerFallback = String(x.h.source || '').toLowerCase() === 'ledgerfallback';
-      return x.openRows.length > 0 && hasOrderLink && !isLedgerFallback && !(x.h.reversed || x.h.adjusted);
-    });
-  body.innerHTML = visible.map(({h, openRows, allItems}) => {
-    const rows = quickProductionHistoryMode === 'all' ? allItems : openRows;
-    const items = renderQuickProductionItems(h, rows, quickProductionHistoryMode === 'all' ? 'No item detail found' : 'Complete / no current requirement');
-    const orders = renderQuickProductionOrders(h);
-    const modeText = h.mode ? `<br><span class="muted">${escapeHtml(h.mode === 'PRIORITY_COVER' ? 'Priority cover' : 'Selected only')}</span>` : '';
-    const status = quickProductionStatusHtml(h, openRows);
-    const canReverse = !(h.reversed || h.adjusted);
-    const action = canReverse ? `<button class="btn btn-danger btn-sm" onclick="reverseQuickProduction('${escapeHtml(h.id || '')}')">Reverse</button>` : '-';
-    return `<tr><td><b>${escapeHtml(h.date || '')}</b><br><span class="muted">${escapeHtml(h.time || '')}</span>${modeText}</td><td>${items}</td><td>${orders}</td><td>${escapeHtml(h.note || '')}</td><td>${status}</td><td>${action}</td></tr>`;
-  }).join('') || `<tr><td colspan="6" class="empty-state">${quickProductionHistoryMode === 'active' ? 'Abhi koi active quick-production requirement nahi hai. All History tab mein purana record dekh sakte ho.' : 'Abhi koi quick production history nahi hai.'}</td></tr>`;
-}
-function setQuickProductionHistoryMode(mode) {
-  quickProductionHistoryMode = mode === 'all' ? 'all' : 'active';
-  renderQuickProductionHistory();
-}
-function openQuickProductionHistory() {
-  renderQuickProductionHistory();
-  if ($('quickProductionModal')) $('quickProductionModal').classList.add('show');
-}
-window.setQuickProductionHistoryMode = setQuickProductionHistoryMode;
-async function reverseQuickProduction(id) {
-  if (!id) return;
-  if (!requirePerm('inventory','edit')) return;
-  const entry = (state.quickProductions || []).find(x => String(x.id) === String(id));
-  const preview = entry ? (entry.items || []).map(i => `${i.product}: -${qty(i.qty)} ${i.unit || productUnit(i.product)}`).join('\n') : '';
-  if (!confirm('Quick Production reverse karna hai?\n\n' + preview + '\n\nIsse ye stock wapas minus ho jayega.')) return;
-  try {
-    const data = await api('/api/production/quick-reverse', { method: 'POST', body: { id } });
-    state = normalizeState(data.state || data.data);
-    renderAll();
-    openQuickProductionHistory();
-    toast('Quick Production reverse ho gaya.', 'success');
-  } catch(e) { toast(e.message, 'error'); }
-}
-window.reverseQuickProduction = reverseQuickProduction;
 
 function renderOrders() {
   const filterSm = $('filterSalesman').value || 'ALL';
@@ -1313,14 +1039,12 @@ function getFilteredReportOrders() {
   const salesman = $('reportSalesman').value || 'ALL';
   const party = $('reportParty').value || 'ALL';
   const product = $('reportProduct').value || 'ALL';
-  const category = $('reportCategory') ? ($('reportCategory').value || 'ALL') : 'ALL';
   return (state.orders || []).filter(o => {
     if (from && o.date < from) return false;
     if (to && o.date > to) return false;
     if (salesman !== 'ALL' && o.salesman !== salesman) return false;
     if (party !== 'ALL' && o.party !== party) return false;
     if (product !== 'ALL' && !(o.items || []).some(i => i.product === product)) return false;
-    if (category !== 'ALL' && !(o.items || []).some(i => productCategory(i.product) === category)) return false;
     return filteredText(o.party, o.salesman, (o.items || []).map(i => i.product).join(' '));
   });
 }
@@ -1331,7 +1055,6 @@ function reportFilterLabel() {
   if (($('reportSalesman').value || 'ALL') !== 'ALL') parts.push('Salesman: ' + $('reportSalesman').value);
   if (($('reportParty').value || 'ALL') !== 'ALL') parts.push('Party: ' + $('reportParty').value);
   if (($('reportProduct').value || 'ALL') !== 'ALL') parts.push('Product: ' + $('reportProduct').value);
-  if ($('reportCategory') && ($('reportCategory').value || 'ALL') !== 'ALL') parts.push('Category: ' + $('reportCategory').value);
   return parts.length ? parts.join(' | ') : 'All records';
 }
 function reportRowsForExport() {
@@ -1464,144 +1187,53 @@ window.deleteTarget = async (encodedUser, type, encodedKey) => {
   } catch(e) { toast(e.message, 'error'); }
 };
 
-
-function reportItemsFiltered() {
-  const category = $('reportCategory') ? ($('reportCategory').value || 'ALL') : 'ALL';
-  const product = $('reportProduct') ? ($('reportProduct').value || 'ALL') : 'ALL';
-  const rows = [];
-  getFilteredReportOrders().forEach(order => {
-    (order.items || []).forEach(item => {
-      if (product !== 'ALL' && item.product !== product) return;
-      if (category !== 'ALL' && productCategory(item.product) !== category) return;
-      const q = Number(item.qty || 0), rate = Number(item.rate || 0), amount = q * rate;
-      rows.push({ order, item, product: item.product || '', qty: q, rate, amount, unit: productUnit(item.product), category: productCategory(item.product), status: isDelivered(order) ? 'Delivered' : 'Pending' });
-    });
-  });
-  return rows;
-}
-function groupAdd(map, key, add) {
-  if (!map[key]) map[key] = Object.assign({}, add);
-  else Object.keys(add).forEach(k => { if (typeof add[k] === 'number') map[key][k] = Number(map[key] || 0) && map[key][k] ? Number(map[key][k]) + add[k] : Number(map[key][k] || 0) + add[k]; });
-  return map[key];
-}
-function reportSummary() {
-  const orders = getFilteredReportOrders();
-  const items = reportItemsFiltered();
-  const totalValue = items.reduce((s,r)=>s+r.amount,0);
-  const deliveredValue = items.filter(r=>r.status==='Delivered').reduce((s,r)=>s+r.amount,0);
-  const pendingValue = totalValue - deliveredValue;
-  return { orders, items, totalValue, deliveredValue, pendingValue, pendingOrders: orders.filter(isPending).length, deliveredOrders: orders.filter(isDelivered).length };
-}
-function byMapRows(map, sortKey='value') { return Object.values(map).sort((a,b)=>Number(b[sortKey]||0)-Number(a[sortKey]||0)); }
-function misOverviewRows() {
-  const s = reportSummary();
-  const productMap = {}, partyMap = {}, salesmanMap = {};
-  s.items.forEach(r => {
-    productMap[r.product] = productMap[r.product] || { product:r.product, pendingQty:0, deliveredQty:0, value:0, unit:r.unit };
-    if (r.status === 'Pending') productMap[r.product].pendingQty += r.qty; else productMap[r.product].deliveredQty += r.qty;
-    productMap[r.product].value += r.amount;
-    partyMap[r.order.party] = partyMap[r.order.party] || { party:r.order.party, value:0, orders:new Set() };
-    partyMap[r.order.party].value += r.amount; partyMap[r.order.party].orders.add(r.order.id);
-    salesmanMap[r.order.salesman || ''] = salesmanMap[r.order.salesman || ''] || { salesman:r.order.salesman || '', value:0, orders:new Set() };
-    salesmanMap[r.order.salesman || ''].value += r.amount; salesmanMap[r.order.salesman || ''].orders.add(r.order.id);
-  });
-  const topProduct = byMapRows(productMap,'value')[0];
-  const topParty = byMapRows(partyMap,'value')[0];
-  const topSalesman = byMapRows(salesmanMap,'value')[0];
-  const shortageProducts = productKeys().filter(p => productShortage(p) > 0).slice(0,5).map(p => `${p} ${qty(productShortage(p))} ${productUnit(p)}`).join(', ') || 'No shortage';
-  return [
-    ['Total orders', s.orders.length, 'Delivered / Pending', `${s.deliveredOrders} / ${s.pendingOrders}`],
-    ['Total value', money(s.totalValue), 'Delivered value', money(s.deliveredValue)],
-    ['Pending value', money(s.pendingValue), 'Filtered items', s.items.length],
-    ['Top salesman', topSalesman ? `${String(topSalesman.salesman).toUpperCase()} (${money(topSalesman.value)})` : '-', 'Top party', topParty ? `${topParty.party} (${money(topParty.value)})` : '-'],
-    ['Top product', topProduct ? `${topProduct.product} (${money(topProduct.value)})` : '-', 'High shortage', shortageProducts]
-  ];
-}
-function misSalesmanRows() {
-  const map = {};
-  reportItemsFiltered().forEach(r => { const k = r.order.salesman || 'OFFICE'; if (!map[k]) map[k]={salesman:k, orders:new Set(), delivered:0, pending:0, value:0, deliveredValue:0, pendingValue:0}; map[k].orders.add(r.order.id); map[k].value+=r.amount; if(r.status==='Delivered'){map[k].deliveredValue+=r.amount; map[k].delivered+=1;} else {map[k].pendingValue+=r.amount; map[k].pending+=1;} });
-  return byMapRows(map,'value').map(r => [String(r.salesman).toUpperCase(), r.orders.size, money(r.value), money(r.deliveredValue), money(r.pendingValue)]);
-}
-function misPartyRows() {
-  const map = {};
-  reportItemsFiltered().forEach(r => { const k = r.order.party || '-'; if (!map[k]) map[k]={party:k, salesman:r.order.salesman||'', orders:new Set(), value:0, deliveredValue:0, pendingValue:0, last:''}; map[k].orders.add(r.order.id); map[k].value+=r.amount; if(r.status==='Delivered') map[k].deliveredValue+=r.amount; else map[k].pendingValue+=r.amount; map[k].last = String(r.order.date||'') > String(map[k].last||'') ? r.order.date : map[k].last; });
-  return byMapRows(map,'value').map(r => [r.party, String(r.salesman).toUpperCase(), r.orders.size, money(r.value), money(r.deliveredValue), money(r.pendingValue), r.last || '-']);
-}
-function misProductRows() {
-  const map = {};
-  reportItemsFiltered().forEach(r => { const k=r.product; if(!map[k]) map[k]={product:k, category:r.category, demand:0, delivered:0, pending:0, value:0, unit:r.unit}; map[k].demand+=r.qty; if(r.status==='Delivered') map[k].delivered+=r.qty; else map[k].pending+=r.qty; map[k].value+=r.amount; });
-  return productKeys().filter(p=>map[p]).concat(Object.keys(map).filter(p=>!state.products[p])).map(p => { const r=map[p]; const stock=Number(state.products?.[p]?.available||0); const shortage=Math.max(0, Number(r.pending||0)-stock); return [r.product, r.category, `${qty(r.demand)} ${r.unit}`, `${qty(r.delivered)} ${r.unit}`, `${qty(r.pending)} ${r.unit}`, `${qty(shortage)} ${r.unit}`, `${qty(stock)} ${r.unit}`, money(r.value)]; });
-}
-function misCategoryRows() {
-  const map = {};
-  reportItemsFiltered().forEach(r => { const k=r.category; if(!map[k]) map[k]={category:k, demand:0, delivered:0, pending:0, value:0}; map[k].demand+=r.qty; if(r.status==='Delivered') map[k].delivered+=r.qty; else map[k].pending+=r.qty; map[k].value+=r.amount; });
-  return byMapRows(map,'value').map(r => [r.category, qty(r.demand), qty(r.delivered), qty(r.pending), money(r.value)]);
-}
-function misStockRows() {
-  const from = $('reportFrom')?.value || '', to = $('reportTo')?.value || '';
-  const product = $('reportProduct')?.value || 'ALL', category = $('reportCategory')?.value || 'ALL';
-  let rows = stockLedgerRows().filter(r => (!from || String(r.date||'') >= from) && (!to || String(r.date||'') <= to));
-  if (product !== 'ALL') rows = rows.filter(r => r.product === product);
-  if (category !== 'ALL') rows = rows.filter(r => productCategory(r.product) === category);
-  const map = {};
-  rows.sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||''))).forEach(r => { const p=r.product; if(!map[p]) map[p]={product:p, unit:r.unit||productUnit(p), opening:Number(r.opening||0), inQty:0, quick:0, out:0, closing:Number(r.closing||0)}; const type=String(r.type||'').toUpperCase(); const q=Number(r.qty||0); if(type==='QUICK_PRODUCTION') map[p].quick+=q; else if(q>0) map[p].inQty+=q; else if(q<0) map[p].out+=Math.abs(q); map[p].closing=Number(r.closing||map[p].closing); });
-  let keys = Object.keys(map).sort(compareProductsBySequence);
-  if (!keys.length) keys = productKeys().filter(p => (product === 'ALL' || p === product) && (category === 'ALL' || productCategory(p) === category));
-  return keys.map(p => { const r=map[p] || {product:p, unit:productUnit(p), opening:'-', inQty:0, quick:0, out:0, closing:Number(state.products?.[p]?.available||0)}; return [p, `${r.opening==='-'?'-':qty(r.opening)} ${r.unit}`, `${qty(r.inQty)} ${r.unit}`, `${qty(r.quick)} ${r.unit}`, `${qty(r.out)} ${r.unit}`, `${qty(r.closing)} ${r.unit}`]; });
-}
-function misQuickRows() {
-  const from=$('reportFrom')?.value||'', to=$('reportTo')?.value||'';
-  const list=(state.quickProductions||[]).filter(q => (!from || String(q.date||'')>=from) && (!to || String(q.date||'')<=to));
-  return list.map(q => [q.date || '', q.time || '', Object.entries(q.items||{}).map(([p,v]) => `${p}: ${qty(v)} ${productUnit(p)}`).join(', '), (q.selectedOrders||[]).length, q.note || 'Quick production']);
-}
-const MIS_HEADERS = { overview:['Metric','Value','Metric','Value'], salesman:['Salesman','Orders','Total value','Delivered value','Pending value'], party:['Party','Salesman','Orders','Total value','Delivered value','Pending value','Last order'], product:['Product','Category','Demand','Delivered','Pending','Shortage','Current stock','Value'], category:['Category','Demand','Delivered','Pending','Value'], stock:['Product','Opening','Stock In','Quick Production','Delivered/Out','Closing'], quick:['Date','Time','Items added','Selected orders','Note'] };
-const MIS_NOTES = { overview:'Business overview summary.', salesman:'Salesman-wise order, delivered and pending value.', party:'Party-wise order and pending value.', product:'Product demand, delivered, pending and shortage.', category:'Category-wise demand and value summary.', stock:'Opening, stock in, quick production, stock out and closing.', quick:'Quick production entries and selected order references.' };
-function activeMisRows() { return { overview:misOverviewRows, salesman:misSalesmanRows, party:misPartyRows, product:misProductRows, category:misCategoryRows, stock:misStockRows, quick:misQuickRows }[activeMisTab]?.() || []; }
-function setMisTab(tab) { activeMisTab = tab || 'overview'; localStorage.setItem('niharo_mis_tab', activeMisTab); renderReports(); }
-window.setMisTab = setMisTab;
 function renderReports() {
-  const s = reportSummary();
-  if ($('reportOrderCount')) $('reportOrderCount').textContent = s.orders.length;
-  if ($('reportTotal')) $('reportTotal').textContent = money(s.totalValue);
-  if ($('reportPendingValue')) $('reportPendingValue').textContent = money(s.pendingValue);
-  if ($('reportDeliveredValue')) $('reportDeliveredValue').textContent = money(s.deliveredValue);
-  $$('.mis-tab').forEach(b => b.classList.toggle('active', b.dataset.misTab === activeMisTab));
-  if ($('misTabNote')) $('misTabNote').textContent = MIS_NOTES[activeMisTab] || '';
-  const headers = MIS_HEADERS[activeMisTab] || MIS_HEADERS.overview;
-  const rows = activeMisRows();
-  if ($('misHead')) $('misHead').innerHTML = `<tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
-  $('reportBody').innerHTML = rows.map(r => `<tr>${r.map((c,i)=>`<td${i>0 && String(c).startsWith('₹') ? ' class="right"' : ''}>${escapeHtml(c)}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${headers.length}" class="empty-state">No MIS data</td></tr>`;
+  const filtered = getFilteredReportOrders();
+  $('reportOrderCount').textContent = filtered.length;
+  $('reportTotal').textContent = money(filtered.reduce((s,o)=>s+orderTotal(o),0));
+  $('reportPending').textContent = filtered.filter(isPending).length;
+  $('reportDelivered').textContent = filtered.filter(isDelivered).length;
+  $('reportBody').innerHTML = filtered.map(o => {
+    const expanded = expandedOrders.has(String(o.id));
+    const itemsCell = `<div class="compact-order-cell" onclick="toggleOrderExpand('${o.id}')">${reportOrderCompactHtml(o)}<button class="btn btn-soft btn-sm" type="button">${expanded ? 'Hide items' : 'View items'}</button></div>${expanded ? `<div class="order-expanded">${orderItemsHtml(o, false)}</div>` : ''}`;
+    return `<tr><td>${escapeHtml(o.date)} ${escapeHtml(o.time || '')}</td><td><span class="badge badge-user">${escapeHtml(String(o.salesman || '').toUpperCase())}</span></td><td><b>${escapeHtml(o.party)}</b></td><td>${itemsCell}</td><td><b>${money(orderTotal(o))}</b></td><td>${isDelivered(o) ? '<span class="badge badge-delivered">Delivered</span>' : '<span class="badge badge-pending">Pending</span>'}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="empty-state">No report data</td></tr>';
 }
 function exportReportXls() {
   if (!requirePerm('reports','export')) return;
-  const rows = activeMisRows();
-  const headers = MIS_HEADERS[activeMisTab] || MIS_HEADERS.overview;
+  const rows = reportRowsForExport();
   if (!rows.length) return toast('Report me data nahi hai', 'error');
-  const html = htmlExcelTable('NIHARO MIS - ' + activeMisTab.toUpperCase() + ' - ' + reportFilterLabel(), headers, rows);
-  downloadTextFile('niharo-mis-' + activeMisTab + '-' + new Date().toISOString().slice(0,10) + '.xls', html);
-  toast('MIS Excel downloaded', 'success');
+  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const html = `<!doctype html><html><head><meta charset="utf-8"></head><body>
+  <table border="1">
+    <tr><th colspan="10" style="font-size:18px">NIHARO WORLD PVT LTD - MIS REPORT</th></tr>
+    <tr><td colspan="10">${escapeHtml(reportFilterLabel())}</td></tr>
+    <tr><th>Date</th><th>Time</th><th>Salesman</th><th>Party</th><th>Product</th><th>Qty</th><th>Rate</th><th>Amount</th><th>Order Total</th><th>Status</th></tr>
+    ${rows.map(r => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.time)}</td><td>${escapeHtml(r.salesman)}</td><td>${escapeHtml(r.party)}</td><td>${escapeHtml(r.product)}</td><td>${r.qty}</td><td>${r.rate}</td><td>${r.amount}</td><td>${r.orderTotal}</td><td>${escapeHtml(r.status)}</td></tr>`).join('')}
+    <tr><th colspan="7">Grand Total</th><th>${total}</th><th colspan="2"></th></tr>
+  </table></body></html>`;
+  const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'niharo-mis-report-' + new Date().toISOString().slice(0,10) + '.xls';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('XLS export downloaded', 'success');
 }
 function exportReportPdf() {
   if (!requirePerm('reports','export')) return;
-  const rows = activeMisRows();
-  const headers = MIS_HEADERS[activeMisTab] || MIS_HEADERS.overview;
+  const rows = reportRowsForExport();
   if (!rows.length) return toast('Report me data nahi hai', 'error');
+  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
   const win = window.open('', '_blank');
   if (!win) return toast('Popup blocked hai. Browser me popup allow karein.', 'error');
-  win.document.write(`<!doctype html><html><head><title>Niharo MIS</title><style>body{font-family:Arial,sans-serif;color:#111827;margin:26px}.head{display:flex;justify-content:space-between;border-bottom:3px solid #064e3b;padding-bottom:12px;margin-bottom:16px}h1{margin:0;font-size:24px}.muted{color:#64748b;font-size:12px}table{width:100%;border-collapse:collapse}th{background:#ecfdf5;color:#065f46;text-transform:uppercase;font-size:11px}th,td{border:1px solid #dbe3ee;padding:8px;text-align:left;font-size:12px}.right{text-align:right}@media print{button{display:none}body{margin:12px}}</style></head><body><button onclick="window.print()" style="padding:10px 16px;margin-bottom:14px">Print / Save PDF</button><div class="head"><div><h1>NIHARO MIS - ${escapeHtml(activeMisTab.toUpperCase())}</h1><div class="muted">${escapeHtml(MIS_NOTES[activeMisTab] || '')}</div></div><div class="muted">${escapeHtml(new Date().toLocaleString('en-IN'))}<br>${escapeHtml(reportFilterLabel())}</div></div><table><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody></table><script>setTimeout(()=>window.print(),400)<\/script></body></html>`);
+  win.document.write(`<!doctype html><html><head><title>Niharo MIS Report</title><style>
+    body{font-family:Arial,sans-serif;color:#111827;margin:28px} .head{display:flex;justify-content:space-between;border-bottom:3px solid #111827;padding-bottom:14px;margin-bottom:18px} h1{margin:0;font-size:24px}.muted{color:#64748b;font-size:12px} table{width:100%;border-collapse:collapse;margin-top:16px} th{background:#f1f5f9;text-transform:uppercase;font-size:11px;color:#475569} th,td{border:1px solid #dbe3ee;padding:8px;text-align:left;font-size:12px}.right{text-align:right}.total{font-weight:bold;background:#f8fafc}@media print{button{display:none} body{margin:18px}}
+  </style></head><body><button onclick="window.print()" style="padding:10px 16px;margin-bottom:14px">Print / Save PDF</button><div class="head"><div><h1>NIHARO WORLD PVT LTD</h1><div class="muted">MIS Report</div></div><div class="muted">Generated: ${new Date().toLocaleString('en-IN')}<br>${escapeHtml(reportFilterLabel())}</div></div><table><thead><tr><th>Date</th><th>Time</th><th>Salesman</th><th>Party</th><th>Product</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th><th>Status</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.time)}</td><td>${escapeHtml(r.salesman)}</td><td>${escapeHtml(r.party)}</td><td>${escapeHtml(r.product)}</td><td class="right">${r.qty}</td><td class="right">${money(r.rate)}</td><td class="right">${money(r.amount)}</td><td>${escapeHtml(r.status)}</td></tr>`).join('')}<tr class="total"><td colspan="7" class="right">Grand Total</td><td class="right">${money(total)}</td><td></td></tr></tbody></table><script>setTimeout(()=>window.print(),400)<\/script></body></html>`);
   win.document.close();
-}
-function copyReportWhatsApp() {
-  const rows = activeMisRows();
-  const headers = MIS_HEADERS[activeMisTab] || MIS_HEADERS.overview;
-  if (!rows.length) return toast('Report me data nahi hai', 'error');
-  const lines = [`Niharo MIS - ${activeMisTab.toUpperCase()}`, reportFilterLabel(), '', headers.join(' | '), ...rows.slice(0,80).map(r => r.join(' | '))];
-  navigator.clipboard?.writeText(lines.join('\n')).then(()=>toast('MIS WhatsApp copy ready', 'success')).catch(()=>toast('Copy failed', 'error'));
 }
 window.exportReportXls = exportReportXls;
 window.exportReportPdf = exportReportPdf;
-window.copyReportWhatsApp = copyReportWhatsApp;
-
 
 function downloadTextFile(filename, content, mime = 'application/vnd.ms-excel') {
   const blob = new Blob(['\ufeff' + content], { type: mime + ';charset=utf-8' });
@@ -1899,9 +1531,8 @@ function round2(n) { return Math.round(Number(n || 0) * 10000) / 10000; }
 function initEvents() {
   $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => { $$('.nav-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); $$('.screen').forEach(s => s.classList.remove('active')); $('screen-' + btn.dataset.screen).classList.add('active'); const titles = { dashboard: ['Warehouse dashboard','Inventory, pending orders, dispatch aur MIS ek jagah.'], inventory: ['Inventory','Stock master aur shortage planning.'], vardana: ['Vardana','Packing material stock, recipe aur production stock in.'], orders: ['Orders','Pending aur completed orders tracker.'], masters: ['Master data','Parties aur salesman login management.'], targets: ['Targets','Salesman category/product target tracker.'], reports: ['MIS report','Business report aur filters.'], settings: ['Settings','Backup, restore aur phone web app link.'], admin: ['Admin Panel','Warehouse users, roles aur permissions.'] }; $('pageTitle').textContent = titles[btn.dataset.screen][0]; $('pageSubtitle').textContent = titles[btn.dataset.screen][1]; document.body.classList.remove('nav-open'); renderAll(); }));
   $('drawerBtn').addEventListener('click', () => document.body.classList.toggle('nav-open')); $('globalSearch').addEventListener('input', renderAll); ['filterSalesman','filterStatus','filterShortage','inventoryCategoryFilter','inventoryStockFilter','inventorySortFilter','inventoryHistoryProduct','inventoryHistoryFrom','inventoryHistoryTo','reportFrom','reportTo','reportSalesman','reportParty','reportProduct','targetSalesmanFilter','targetCategoryFilter','targetProductFilter','vardanaRecipeProduct','vardanaProductionProduct'].forEach(id => { if ($(id)) $(id).addEventListener('change', renderAll); }); if ($('vardanaProductionQty')) $('vardanaProductionQty').addEventListener('input', renderVardanaPreview);
-  $$('.mis-tab').forEach(btn => btn.addEventListener('click', () => setMisTab(btn.dataset.misTab || 'overview')));
-  $('exportReportXls').addEventListener('click', exportReportXls); $('exportReportPdf').addEventListener('click', exportReportPdf); $('clearReportFilters').addEventListener('click', () => { ['reportFrom','reportTo'].forEach(id => $(id).value = ''); ['reportSalesman','reportParty','reportProduct','reportCategory'].forEach(id => { if ($(id)) $(id).value = 'ALL'; }); renderAll(); });
-  if ($('closeTargetModalBtn')) $('closeTargetModalBtn').addEventListener('click', () => $('targetModal').classList.remove('show')); if ($('saveCategoryTargetBtn')) $('saveCategoryTargetBtn').addEventListener('click', () => saveTarget('category')); if ($('saveProductTargetBtn')) $('saveProductTargetBtn').addEventListener('click', () => saveTarget('product')); if ($('saveTargetSetCategoryBtn')) $('saveTargetSetCategoryBtn').addEventListener('click', () => saveTargetFromTargets('category')); if ($('saveTargetSetProductBtn')) $('saveTargetSetProductBtn').addEventListener('click', () => saveTargetFromTargets('product')); $('adminLoginBtn').addEventListener('click', () => showLogin(false)); $('closeLoginBtn').addEventListener('click', hideLogin); $('doLoginBtn').addEventListener('click', async () => { try { const data = await api('/api/admin/login', { method: 'POST', body: { user: $('adminUser').value, password: $('adminPassword').value } }); adminToken = data.token; adminUser = data.user?.username || $('adminUser').value || 'admin'; adminRole = data.user?.adminRole || 'Viewer'; adminPermissions = data.user?.permissions || {}; localStorage.setItem('niharo_admin_token', adminToken); localStorage.setItem('niharo_admin_user', adminUser); localStorage.setItem('niharo_admin_role', adminRole); localStorage.setItem('niharo_admin_permissions', JSON.stringify(adminPermissions || {})); updateAuthLock(); $('loginModal').classList.remove('show'); $('adminPassword').value = ''; toast('Warehouse login successful', 'success'); await loadState(); } catch (e) { toast(e.message, 'error'); } }); $('adminPassword').addEventListener('keydown', e => { if (e.key === 'Enter') $('doLoginBtn').click(); }); if ($('adminUser')) $('adminUser').addEventListener('keydown', e => { if (e.key === 'Enter') $('adminPassword').focus(); }); $('adminLogoutBtn').addEventListener('click', () => { adminToken = ''; adminUser = ''; adminRole = ''; adminPermissions = {}; localStorage.removeItem('niharo_admin_token'); localStorage.removeItem('niharo_admin_user'); localStorage.removeItem('niharo_admin_role'); localStorage.removeItem('niharo_admin_permissions'); updateAuthLock(); state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], quickProductions: [], adminUsers: [], rolePermissions: {}, meta: {} }; renderAll(); showLogin(true); toast('Logged out'); });
+  $('exportReportXls').addEventListener('click', exportReportXls); $('exportReportPdf').addEventListener('click', exportReportPdf); $('clearReportFilters').addEventListener('click', () => { ['reportFrom','reportTo'].forEach(id => $(id).value = ''); ['reportSalesman','reportParty','reportProduct'].forEach(id => $(id).value = 'ALL'); renderAll(); });
+  if ($('closeTargetModalBtn')) $('closeTargetModalBtn').addEventListener('click', () => $('targetModal').classList.remove('show')); if ($('saveCategoryTargetBtn')) $('saveCategoryTargetBtn').addEventListener('click', () => saveTarget('category')); if ($('saveProductTargetBtn')) $('saveProductTargetBtn').addEventListener('click', () => saveTarget('product')); if ($('saveTargetSetCategoryBtn')) $('saveTargetSetCategoryBtn').addEventListener('click', () => saveTargetFromTargets('category')); if ($('saveTargetSetProductBtn')) $('saveTargetSetProductBtn').addEventListener('click', () => saveTargetFromTargets('product')); $('adminLoginBtn').addEventListener('click', () => showLogin(false)); $('closeLoginBtn').addEventListener('click', hideLogin); $('doLoginBtn').addEventListener('click', async () => { try { const data = await api('/api/admin/login', { method: 'POST', body: { user: $('adminUser').value, password: $('adminPassword').value } }); adminToken = data.token; adminUser = data.user?.username || $('adminUser').value || 'admin'; adminRole = data.user?.adminRole || 'Viewer'; adminPermissions = data.user?.permissions || {}; localStorage.setItem('niharo_admin_token', adminToken); localStorage.setItem('niharo_admin_user', adminUser); localStorage.setItem('niharo_admin_role', adminRole); localStorage.setItem('niharo_admin_permissions', JSON.stringify(adminPermissions || {})); updateAuthLock(); $('loginModal').classList.remove('show'); $('adminPassword').value = ''; toast('Warehouse login successful', 'success'); await loadState(); } catch (e) { toast(e.message, 'error'); } }); $('adminPassword').addEventListener('keydown', e => { if (e.key === 'Enter') $('doLoginBtn').click(); }); if ($('adminUser')) $('adminUser').addEventListener('keydown', e => { if (e.key === 'Enter') $('adminPassword').focus(); }); $('adminLogoutBtn').addEventListener('click', () => { adminToken = ''; adminUser = ''; adminRole = ''; adminPermissions = {}; localStorage.removeItem('niharo_admin_token'); localStorage.removeItem('niharo_admin_user'); localStorage.removeItem('niharo_admin_role'); localStorage.removeItem('niharo_admin_permissions'); updateAuthLock(); state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], adminUsers: [], rolePermissions: {}, meta: {} }; renderAll(); showLogin(true); toast('Logged out'); });
   $('stockName').addEventListener('input', handleStockNameInput);
   $('stockName').addEventListener('change', updateStockConversionFields);
   if ($('stockQty')) $('stockQty').addEventListener('input', syncStockAltFromBase);
@@ -1938,17 +1569,11 @@ function initEvents() {
     try {
       const method = editingOrderId ? 'PATCH' : 'POST';
       const url = editingOrderId ? '/api/orders/' + encodeURIComponent(editingOrderId) : '/api/orders';
-      const salesman = $('orderSalesman') ? ($('orderSalesman').value || 'OFFICE ADMIN') : 'OFFICE ADMIN';
-      const body = { party, items: cart, salesman };
+      const body = editingOrderId ? { party, items: cart } : { party, items: cart, salesman: 'OFFICE ADMIN' };
       const data = await api(url, { method, body });
       state = normalizeState(data.state || data.data);
       editingOrderId = '';
       cart = [];
-      if ($('orderParty')) $('orderParty').value = '';
-      if ($('orderSalesman')) $('orderSalesman').value = 'OFFICE ADMIN';
-      if ($('orderRate')) $('orderRate').value = '';
-      if ($('orderQty')) $('orderQty').value = '';
-      if ($('orderAltQty')) $('orderAltQty').value = '';
       renderAll();
       toast(method === 'PATCH' ? 'Pending order updated' : 'Order submitted', 'success');
     } catch(e) { toast(e.message, 'error'); }
@@ -1958,7 +1583,7 @@ function initEvents() {
   $('openParserBtn').addEventListener('click', () => { if (!requirePerm('orders','edit')) return; $('parserModal').classList.add('show'); $('parserPreview').innerHTML = ''; $('importParsedBtn').style.display = 'none'; parsedOrder = null; }); $('closeParserBtn').addEventListener('click', () => $('parserModal').classList.remove('show')); $('parseBtn').addEventListener('click', () => { parsedOrder = parseWhatsApp($('parserText').value); if (!parsedOrder.items.length) return toast('Valid item lines nahi mili', 'error'); $('parserPreview').innerHTML = `<div class="card" style="box-shadow:none"><b>Party:</b> ${escapeHtml(parsedOrder.party || 'Not found')}<br><br>${parsedOrder.items.map(i => `• ${escapeHtml(i.product)} — ${qty(i.qty)} ${escapeHtml(productUnit(i.product))} @ ${money(i.rate)}`).join('<br>')}</div>`; $('importParsedBtn').style.display = ''; }); $('importParsedBtn').addEventListener('click', async () => { if (!parsedOrder) return; if (parsedOrder.party && !state.parties.includes(parsedOrder.party)) { if (confirm(`Party "${parsedOrder.party}" listed nahi hai. Add karein?`)) { try { const data = await api('/api/parties', { method: 'POST', body: { name: parsedOrder.party } }); state = normalizeState(data.state || data.data); } catch(e) { toast(e.message, 'error'); return; } } else return; } $('orderParty').value = parsedOrder.party; cart = parsedOrder.items; renderCart(); $('parserModal').classList.remove('show'); toast('Imported to cart', 'success'); });
   $('exportBtn').addEventListener('click', async () => { if (!requirePerm('settings','export')) return; try { const data = await api('/api/export'); const blob = new Blob([JSON.stringify(data.store || data.data || data.state, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'niharo-backup-' + new Date().toISOString().slice(0,10) + '.json'; a.click(); URL.revokeObjectURL(a.href); } catch(e) { toast(e.message, 'error'); } });
   $('importFile').addEventListener('change', async e => { if (!requirePerm('settings','edit')) return; const file = e.target.files[0]; if (!file) return; if (!confirm('Backup import karne se current data replace ho sakta hai. Continue?')) return; try { const raw = JSON.parse(await file.text()); const data = await api('/api/import', { method: 'POST', body: raw }); state = normalizeState(data.state || data.data); renderAll(); toast('Backup imported', 'success'); } catch(err) { toast(err.message, 'error'); } e.target.value = ''; });
-  if ($('adminUserForm')) $('adminUserForm').addEventListener('submit', saveAdminUser); if ($('rolePermissionRole')) $('rolePermissionRole').addEventListener('change', renderRolePermissions); if ($('saveRolePermissionsBtn')) $('saveRolePermissionsBtn').addEventListener('click', saveRolePermissions); if ($('allocationMode')) { $('allocationMode').value = localStorage.getItem('niharo_allocation_mode') || 'SMART'; $('allocationMode').addEventListener('change', () => { localStorage.setItem('niharo_allocation_mode', $('allocationMode').value); renderRecentOrders(); renderOrders(); }); } if ($('selectShortageOrdersBtn')) $('selectShortageOrdersBtn').addEventListener('click', () => window.selectShortageOrders()); if ($('clearDispatchSelectionBtn')) $('clearDispatchSelectionBtn').addEventListener('click', () => window.clearDispatchSelection()); if ($('exportDispatchPdfBtn')) $('exportDispatchPdfBtn').addEventListener('click', exportDispatchPdf); if ($('exportWorkerSlipBtn')) $('exportWorkerSlipBtn').addEventListener('click', exportWorkerSlipPdf); if ($('quickProductionSelectedBtn')) $('quickProductionSelectedBtn').addEventListener('click', quickProductionForSelectedOrders); if ($('viewQuickProductionBtn')) $('viewQuickProductionBtn').addEventListener('click', openQuickProductionHistory); if ($('qpActiveTabBtn')) $('qpActiveTabBtn').addEventListener('click', () => setQuickProductionHistoryMode('active')); if ($('qpAllTabBtn')) $('qpAllTabBtn').addEventListener('click', () => setQuickProductionHistoryMode('all')); if ($('closeQuickProductionBtn')) $('closeQuickProductionBtn').addEventListener('click', () => $('quickProductionModal')?.classList.remove('show')); if ($('exportDispatchXlsBtn')) $('exportDispatchXlsBtn').addEventListener('click', exportDispatchXls); if ($('copyDispatchWhatsAppBtn')) $('copyDispatchWhatsAppBtn').addEventListener('click', copyDispatchWhatsApp); if ($('openDispatchWhatsAppBtn')) $('openDispatchWhatsAppBtn').addEventListener('click', openDispatchWhatsApp);
+  if ($('adminUserForm')) $('adminUserForm').addEventListener('submit', saveAdminUser); if ($('rolePermissionRole')) $('rolePermissionRole').addEventListener('change', renderRolePermissions); if ($('saveRolePermissionsBtn')) $('saveRolePermissionsBtn').addEventListener('click', saveRolePermissions); if ($('allocationMode')) { $('allocationMode').value = localStorage.getItem('niharo_allocation_mode') || 'SMART'; $('allocationMode').addEventListener('change', () => { localStorage.setItem('niharo_allocation_mode', $('allocationMode').value); renderRecentOrders(); renderOrders(); }); } if ($('selectShortageOrdersBtn')) $('selectShortageOrdersBtn').addEventListener('click', () => window.selectShortageOrders()); if ($('clearDispatchSelectionBtn')) $('clearDispatchSelectionBtn').addEventListener('click', () => window.clearDispatchSelection()); if ($('exportDispatchPdfBtn')) $('exportDispatchPdfBtn').addEventListener('click', exportDispatchPdf); if ($('exportWorkerSlipBtn')) $('exportWorkerSlipBtn').addEventListener('click', exportWorkerSlipPdf); if ($('quickProductionSelectedBtn')) $('quickProductionSelectedBtn').addEventListener('click', quickProductionForSelectedOrders); if ($('exportDispatchXlsBtn')) $('exportDispatchXlsBtn').addEventListener('click', exportDispatchXls); if ($('copyDispatchWhatsAppBtn')) $('copyDispatchWhatsAppBtn').addEventListener('click', copyDispatchWhatsApp); if ($('openDispatchWhatsAppBtn')) $('openDispatchWhatsAppBtn').addEventListener('click', openDispatchWhatsApp);
   $('resetBtn').addEventListener('click', async () => { if (!requirePerm('settings','delete')) return; const val = prompt('Full reset ke liye DELETE type karein'); if (val !== 'DELETE') return; try { const data = await api('/api/reset', { method: 'POST', body: { confirm: 'DELETE' } }); state = normalizeState(data.state || data.data); renderAll(); toast('Database reset', 'success'); } catch(e) { toast(e.message, 'error'); } });
 }
 updateAuthLock();

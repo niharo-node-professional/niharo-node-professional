@@ -490,38 +490,3 @@ td:first-child, th:first-child { width: 72px; }
 /* v50 alternate unit conversion */
 .conversion-mini{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.conversion-mini input{width:86px;padding:8px 9px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;font-weight:800}.conversion-mini small{color:var(--muted);font-weight:800}.unit-conv-note{font-size:12px;color:var(--muted);margin-top:4px}
 @media (max-width:720px){#orderAltQtyWrap{display:block}.grid-3{grid-template-columns:1fr 1fr}.conversion-mini{gap:4px}.conversion-mini input{width:78px}}
-/* v53 Quick Production history modal */
-.modal-wide { width: min(980px, 100%); max-height: 86vh; overflow: auto; }
-
-
-/* v54 product sequence drag/drop */
-.helper-line{margin:6px 0 12px;color:var(--muted);font-size:13px}
-.drag-handle{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:#ecfdf5;color:#047857;font-weight:900;cursor:grab;border:1px solid rgba(4,120,87,.18)}
-.drag-handle:active{cursor:grabbing}
-.seq-no{font-size:11px;color:var(--muted);margin-top:4px;text-align:center}
-.product-sequence-row.dragging-row{opacity:.55;outline:2px dashed #10b981;background:#ecfdf5}
-.product-sequence-row.drag-over-row{box-shadow:inset 0 2px 0 #10b981;background:#f0fdf4}
-@media(max-width:720px){.drag-handle{width:28px;height:28px}.seq-no{display:none}}
-
-
-/* v55 MIS v2 */
-.mis-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 8px}
-.mis-tab{border:1px solid var(--border);background:#f8fafc;color:#334155;border-radius:999px;padding:9px 13px;font-weight:800;cursor:pointer;font-size:13px}
-.mis-tab.active{background:linear-gradient(135deg,#047857,#059669);color:#fff;border-color:#047857;box-shadow:0 8px 18px rgba(5,150,105,.18)}
-.mis-tab-note{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:12px;padding:10px 12px;color:#065f46;font-weight:700;margin:8px 0 14px;font-size:13px}
-.mis-card #misTable td:first-child{font-weight:800;color:#0f172a}
-@media(max-width:760px){.mis-tabs{overflow-x:auto;flex-wrap:nowrap;padding-bottom:6px}.mis-tab{white-space:nowrap}.mis-filters .col-2{grid-column:span 6}}
-
-/* v61 Quick Production history professional header */
-.modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; }
-.modal-head h3 { margin:0 0 6px; }
-.modal-head p { margin:0; color:var(--muted); }
-.quick-modal .table-wrap { max-height:68vh; overflow:auto; }
-.qp-items { display:flex; flex-direction:column; gap:6px; }
-.qp-item { padding:7px 9px; border:1px solid #dfe8e5; background:#f8fffb; border-radius:12px; }
-.qp-item-main { font-weight:900; color:#10201b; }
-.qp-item-sub { margin-top:3px; color:#64748b; font-size:12px; line-height:1.35; }
-.qp-party-list { display:flex; flex-direction:column; gap:4px; }
-.qp-party { font-weight:800; color:#10201b; }
-@media (max-width: 720px) { .modal-head { flex-direction:column; } .modal-head .btn { width:100%; } }
-.qp-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 6px; }

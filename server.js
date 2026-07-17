@@ -702,7 +702,8 @@ function normalizeQuickProductions(entries, ledger) {
       adjusted: !!(e.reversed || e.adjusted),
       reversedAt: e.reversedAt || null,
       reverseNote: e.reverseNote || '',
-      activeItems: activeQuickProductionItems({ stockLedger: ledger, products: {} , quickProductions: source }, id)
+      activeItems: activeQuickProductionItems({ stockLedger: ledger, products: {} , quickProductions: source }, id),
+      source: 'saved'
     });
   }
   const group = {};
@@ -730,6 +731,7 @@ function normalizeQuickProductions(entries, ledger) {
     e.reversedAt = e.reversed ? 'Reversed in stock ledger' : null;
     e.reverseNote = e.reversed ? 'Reversed from stock ledger' : '';
     e.activeItems = activeQuickProductionItems({ stockLedger: ledger, products: {}, quickProductions: Object.values(group) }, e.id);
+    e.source = 'ledgerFallback';
     out.push(e);
   }
   return out.sort((a,b)=>String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 1000);

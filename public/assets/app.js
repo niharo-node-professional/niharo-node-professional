@@ -839,10 +839,15 @@ function renderQuickProductionHistory() {
   if (activeBtn) activeBtn.className = quickProductionHistoryMode === 'active' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
   if (allBtn) allBtn.className = quickProductionHistoryMode === 'all' ? 'btn btn-primary btn-sm' : 'btn btn-soft btn-sm';
   const hint = $('qpHistoryHint');
-  if (hint) hint.textContent = quickProductionHistoryMode === 'active' ? 'Active Requirement mein quick production ka woh balance dikhega jo final stock-in se abhi adjust hona baaki hai.' : 'All History mein delivered, active aur reversed quick production sab record dikhega.';
+  if (hint) hint.textContent = quickProductionHistoryMode === 'active' ? 'Active Requirement mein sirf linked selected-order quick production ka pending adjustment balance dikhega. Old/unlinked entries All History mein rahengi.' : 'All History mein delivered, active aur reversed quick production sab record dikhega.';
   const allRows = Array.isArray(state.quickProductions) ? state.quickProductions.slice(0, 300) : [];
   const visible = allRows.map(h => ({ h, openRows: quickProductionOpenRows(h), allItems: quickProductionAllRows(h) }))
-    .filter(x => quickProductionHistoryMode === 'all' ? x.allItems.length > 0 : x.openRows.length > 0);
+    .filter(x => {
+      if (quickProductionHistoryMode === 'all') return x.allItems.length > 0;
+      const hasOrderLink = quickProductionOrderIds(x.h).size > 0 || (Array.isArray(x.h.selectedOrders) && x.h.selectedOrders.length > 0);
+      const isLedgerFallback = String(x.h.source || '').toLowerCase() === 'ledgerfallback';
+      return x.openRows.length > 0 && hasOrderLink && !isLedgerFallback && !(x.h.reversed || x.h.adjusted);
+    });
   body.innerHTML = visible.map(({h, openRows, allItems}) => {
     const rows = quickProductionHistoryMode === 'all' ? allItems : openRows;
     const items = renderQuickProductionItems(h, rows, quickProductionHistoryMode === 'all' ? 'No item detail found' : 'Complete / no current requirement');

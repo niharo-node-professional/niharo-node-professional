@@ -266,8 +266,9 @@ function renderDropdowns() {
   const vardanaProductOptions = ['<option value="">Select product</option>', ...productKeys().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)} (${escapeHtml(productUnit(p))})</option>`)].join('');
   if ($('vardanaRecipeProduct')) preserveSelect($('vardanaRecipeProduct'), vardanaProductOptions);
   if ($('vardanaProductionProduct')) preserveSelect($('vardanaProductionProduct'), vardanaProductOptions);
-  if ($('closingBalanceProductList')) $('closingBalanceProductList').innerHTML = productKeys().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(productCategory(p))} | ${escapeHtml(productUnit(p))} | Stock ${qty(state.products[p]?.available || 0)}</option>`).join('');
+  if ($('closingBalanceProductList')) $('closingBalanceProductList').innerHTML = productKeys().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(productCategory(p))} | ${escapeHtml(productUnit(p))}${hasConversion(p) ? ' / ' + escapeHtml(productAltUnit(p)) : ''} | Stock ${qty(state.products[p]?.available || 0)} ${escapeHtml(productUnit(p))}${hasConversion(p) ? ' ≈ ' + qty(baseToAlt(p, state.products[p]?.available || 0)) + ' ' + escapeHtml(productAltUnit(p)) : ''}</option>`).join('');
   if ($('closingBalanceProduct') && !$('closingBalanceProduct').value) $('closingBalanceProduct').placeholder = 'Product code/name type karo, jaise 200';
+  if ($('closingBalanceDate') && !$('closingBalanceDate').value) $('closingBalanceDate').value = new Date().toISOString().slice(0,10);
   const rp = $('vardanaRecipeProduct') ? $('vardanaRecipeProduct').value : '';
   const pp = $('vardanaProductionProduct') ? $('vardanaProductionProduct').value : '';
   if ($('vardanaRecipeProductUnit')) $('vardanaRecipeProductUnit').textContent = rp ? productUnit(rp) : 'UNIT';
@@ -1496,21 +1497,51 @@ function resolveProductInput(value) {
   if (starts.length === 1) return starts[0];
   return text;
 }
+function selectedClosingUnit(product) {
+  if (!product) return 'BASE';
+  const el = $('closingBalanceUnit');
+  const base = productUnit(product);
+  const alt = productAltUnit(product);
+  const wanted = el ? String(el.value || 'BASE') : 'BASE';
+  if (wanted === 'ALT' && hasConversion(product)) return 'ALT';
+  return 'BASE';
+}
+function closingInputToBase(product, value) {
+  const n = Number(value || 0);
+  return selectedClosingUnit(product) === 'ALT' ? altToBase(product, n) : n;
+}
+function refreshClosingUnitOptions(product) {
+  const el = $('closingBalanceUnit');
+  if (!el) return;
+  const prev = el.value || 'BASE';
+  if (!product) { el.innerHTML = '<option value="BASE">Unit</option>'; return; }
+  const base = productUnit(product);
+  const opts = [`<option value="BASE">${escapeHtml(base)}</option>`];
+  if (hasConversion(product)) opts.push(`<option value="ALT">${escapeHtml(productAltUnit(product))}</option>`);
+  el.innerHTML = opts.join('');
+  el.value = (prev === 'ALT' && hasConversion(product)) ? 'ALT' : 'BASE';
+}
 function updateClosingBalancePreview() {
   if (!$('closingBalanceProduct')) return;
   const product = resolveProductInput($('closingBalanceProduct').value);
+  refreshClosingUnitOptions(product);
   const unit = product ? productUnit(product) : 'UNIT';
+  const altUnit = product ? productAltUnit(product) : '';
+  const inputUnit = product && selectedClosingUnit(product) === 'ALT' ? altUnit : unit;
   const current = product ? Number(state.products?.[product]?.available || 0) : 0;
   const closingRaw = $('closingBalanceQty') ? $('closingBalanceQty').value : '';
-  const closing = Number(closingRaw || 0);
-  if ($('closingBalanceCurrent')) $('closingBalanceCurrent').textContent = product ? `${qty(current)} ${unit}` : `0 ${unit}`;
+  const closingDate = $('closingBalanceDate') ? $('closingBalanceDate').value : new Date().toISOString().slice(0,10);
+  const closingInput = Number(closingRaw || 0);
+  const closingBase = product ? closingInputToBase(product, closingInput) : closingInput;
+  if ($('closingBalanceCurrent')) $('closingBalanceCurrent').innerHTML = product ? `${qty(current)} ${escapeHtml(unit)}${hasConversion(product) ? `<br><small>≈ ${qty(baseToAlt(product, current))} ${escapeHtml(altUnit)}</small>` : ''}` : `0 ${escapeHtml(unit)}`;
   if (!$('closingBalancePreview')) return;
   if (!product) { $('closingBalancePreview').textContent = 'Product select karo aur actual closing balance daalo.'; return; }
-  if (closingRaw === '') { $('closingBalancePreview').textContent = `Current app stock ${qty(current)} ${unit}. Actual closing balance daalne par difference auto calculate hoga.`; return; }
-  const diff = closing - current;
+  const convNote = hasConversion(product) ? ` (${conversionText(product)})` : '';
+  if (closingRaw === '') { $('closingBalancePreview').textContent = `Current app stock ${qty(current)} ${unit}. Actual closing balance ${inputUnit} mein daal sakte ho.${convNote}`; return; }
+  const diff = closingBase - current;
   if (Math.abs(diff) < 0.000001) $('closingBalancePreview').textContent = `No change: app stock aur actual closing dono ${qty(current)} ${unit} hain.`;
-  else if (diff > 0) $('closingBalancePreview').textContent = `Stock IN +${qty(diff)} ${unit} hoga. Pehle Quick Production active balance adjust hoga, phir remaining stock add hoga.`;
-  else $('closingBalancePreview').textContent = `Stock OUT ${qty(Math.abs(diff))} ${unit} hoga, taaki app stock actual closing ${qty(closing)} ${unit} ho jaye.`;
+  else if (diff > 0) $('closingBalancePreview').textContent = `${closingDate} date par Stock IN +${qty(diff)} ${unit} hoga. Aapne closing ${qty(closingInput)} ${inputUnit} dali hai. Pehle Quick Production active balance adjust hoga, phir remaining stock add hoga.`;
+  else $('closingBalancePreview').textContent = `${closingDate} date par Stock OUT ${qty(Math.abs(diff))} ${unit} hoga, taaki app stock actual closing ${qty(closingBase)} ${unit} ho jaye.`;
 }
 window.editVardanaMaterial = async (encoded) => {
   if (!requirePerm('vardana','edit')) return;
@@ -1617,7 +1648,7 @@ function round2(n) { return Math.round(Number(n || 0) * 10000) / 10000; }
 
 function initEvents() {
   $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => { $$('.nav-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); $$('.screen').forEach(s => s.classList.remove('active')); $('screen-' + btn.dataset.screen).classList.add('active'); const titles = { dashboard: ['Warehouse dashboard','Inventory, pending orders, dispatch aur MIS ek jagah.'], inventory: ['Inventory','Stock master aur shortage planning.'], vardana: ['Vardana','Packing material stock, recipe aur production stock in.'], orders: ['Orders','Pending aur completed orders tracker.'], masters: ['Master data','Parties aur salesman login management.'], targets: ['Targets','Salesman category/product target tracker.'], reports: ['MIS report','Business report aur filters.'], settings: ['Settings','Backup, restore aur phone web app link.'], admin: ['Admin Panel','Warehouse users, roles aur permissions.'] }; $('pageTitle').textContent = titles[btn.dataset.screen][0]; $('pageSubtitle').textContent = titles[btn.dataset.screen][1]; document.body.classList.remove('nav-open'); renderAll(); }));
-  $('drawerBtn').addEventListener('click', () => document.body.classList.toggle('nav-open')); $('globalSearch').addEventListener('input', renderAll); ['filterSalesman','filterStatus','filterShortage','inventoryCategoryFilter','inventoryStockFilter','inventorySortFilter','inventoryHistoryProduct','inventoryHistoryFrom','inventoryHistoryTo','reportFrom','reportTo','reportSalesman','reportParty','reportProduct','targetSalesmanFilter','targetCategoryFilter','targetProductFilter','vardanaRecipeProduct','vardanaProductionProduct'].forEach(id => { if ($(id)) $(id).addEventListener('change', renderAll); }); if ($('closingBalanceProduct')) { $('closingBalanceProduct').addEventListener('input', updateClosingBalancePreview); $('closingBalanceProduct').addEventListener('change', updateClosingBalancePreview); } if ($('vardanaProductionQty')) $('vardanaProductionQty').addEventListener('input', renderVardanaPreview); if ($('closingBalanceQty')) $('closingBalanceQty').addEventListener('input', updateClosingBalancePreview);
+  $('drawerBtn').addEventListener('click', () => document.body.classList.toggle('nav-open')); $('globalSearch').addEventListener('input', renderAll); ['filterSalesman','filterStatus','filterShortage','inventoryCategoryFilter','inventoryStockFilter','inventorySortFilter','inventoryHistoryProduct','inventoryHistoryFrom','inventoryHistoryTo','reportFrom','reportTo','reportSalesman','reportParty','reportProduct','targetSalesmanFilter','targetCategoryFilter','targetProductFilter','vardanaRecipeProduct','vardanaProductionProduct','closingBalanceDate'].forEach(id => { if ($(id)) $(id).addEventListener('change', renderAll); }); if ($('closingBalanceProduct')) { $('closingBalanceProduct').addEventListener('input', updateClosingBalancePreview); $('closingBalanceProduct').addEventListener('change', updateClosingBalancePreview); } if ($('vardanaProductionQty')) $('vardanaProductionQty').addEventListener('input', renderVardanaPreview); if ($('closingBalanceQty')) $('closingBalanceQty').addEventListener('input', updateClosingBalancePreview); if ($('closingBalanceUnit')) $('closingBalanceUnit').addEventListener('change', updateClosingBalancePreview);
   $('exportReportXls').addEventListener('click', exportReportXls); $('exportReportPdf').addEventListener('click', exportReportPdf); $('clearReportFilters').addEventListener('click', () => { ['reportFrom','reportTo'].forEach(id => $(id).value = ''); ['reportSalesman','reportParty','reportProduct'].forEach(id => $(id).value = 'ALL'); renderAll(); });
   if ($('closeTargetModalBtn')) $('closeTargetModalBtn').addEventListener('click', () => $('targetModal').classList.remove('show')); if ($('saveCategoryTargetBtn')) $('saveCategoryTargetBtn').addEventListener('click', () => saveTarget('category')); if ($('saveProductTargetBtn')) $('saveProductTargetBtn').addEventListener('click', () => saveTarget('product')); if ($('saveTargetSetCategoryBtn')) $('saveTargetSetCategoryBtn').addEventListener('click', () => saveTargetFromTargets('category')); if ($('saveTargetSetProductBtn')) $('saveTargetSetProductBtn').addEventListener('click', () => saveTargetFromTargets('product')); $('adminLoginBtn').addEventListener('click', () => showLogin(false)); $('closeLoginBtn').addEventListener('click', hideLogin); $('doLoginBtn').addEventListener('click', async () => { try { const data = await api('/api/admin/login', { method: 'POST', body: { user: $('adminUser').value, password: $('adminPassword').value } }); adminToken = data.token; adminUser = data.user?.username || $('adminUser').value || 'admin'; adminRole = data.user?.adminRole || 'Viewer'; adminPermissions = data.user?.permissions || {}; localStorage.setItem('niharo_admin_token', adminToken); localStorage.setItem('niharo_admin_user', adminUser); localStorage.setItem('niharo_admin_role', adminRole); localStorage.setItem('niharo_admin_permissions', JSON.stringify(adminPermissions || {})); updateAuthLock(); $('loginModal').classList.remove('show'); $('adminPassword').value = ''; toast('Warehouse login successful', 'success'); await loadState(); } catch (e) { toast(e.message, 'error'); } }); $('adminPassword').addEventListener('keydown', e => { if (e.key === 'Enter') $('doLoginBtn').click(); }); if ($('adminUser')) $('adminUser').addEventListener('keydown', e => { if (e.key === 'Enter') $('adminPassword').focus(); }); $('adminLogoutBtn').addEventListener('click', () => { adminToken = ''; adminUser = ''; adminRole = ''; adminPermissions = {}; localStorage.removeItem('niharo_admin_token'); localStorage.removeItem('niharo_admin_user'); localStorage.removeItem('niharo_admin_role'); localStorage.removeItem('niharo_admin_permissions'); updateAuthLock(); state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], adminUsers: [], rolePermissions: {}, meta: {} }; renderAll(); showLogin(true); toast('Logged out'); });
   $('stockName').addEventListener('input', handleStockNameInput);
@@ -1647,7 +1678,7 @@ function initEvents() {
     e.preventDefault(); if (!requirePerm('vardana','edit')) return;
     try { const data = await api('/api/vardana/production', { method: 'POST', body: { product: $('vardanaProductionProduct').value, qty: $('vardanaProductionQty').value } }); state = normalizeState(data.state || data.data); $('vardanaProductionQty').value = ''; renderAll(); toast('Production added. Inventory plus, vardana minus.', 'success'); } catch(e) { toast(e.message, 'error'); }
   });
-  if ($('closingBalanceForm')) $('closingBalanceForm').addEventListener('submit', async e => { e.preventDefault(); if (!requirePerm('inventory','edit')) return; const product = resolveProductInput($('closingBalanceProduct').value); const closingRaw = $('closingBalanceQty').value; const closing = Number(closingRaw || 0); if (!product || closingRaw === '' || Number.isNaN(closing) || closing < 0) { toast('Product aur valid closing balance daalo', 'error'); return; } const current = Number(state.products?.[product]?.available || 0); const diff = closing - current; if (Math.abs(diff) < 0.000001) { toast('No change. Closing balance already same hai.'); return; } try { const data = await api('/api/products/stock', { method: 'POST', body: { name: product, location: productCategory(product), qty: Math.abs(diff), type: diff > 0 ? 'IN' : 'OUT' } }); state = normalizeState(data.state || data.data); $('closingBalanceQty').value = ''; renderAll(); toast(diff > 0 ? `Closing balance saved: Stock IN +${qty(diff)} ${productUnit(product)}` : `Closing balance saved: Stock OUT ${qty(Math.abs(diff))} ${productUnit(product)}`, 'success'); } catch (err) { toast(err.message, 'error'); } });
+  if ($('closingBalanceForm')) $('closingBalanceForm').addEventListener('submit', async e => { e.preventDefault(); if (!requirePerm('inventory','edit')) return; const product = resolveProductInput($('closingBalanceProduct').value); const closingRaw = $('closingBalanceQty').value; const closingInput = Number(closingRaw || 0); const entryDate = $('closingBalanceDate') ? $('closingBalanceDate').value : new Date().toISOString().slice(0,10); if (!product || closingRaw === '' || Number.isNaN(closingInput) || closingInput < 0 || !entryDate) { toast('Product, date aur valid closing balance daalo', 'error'); return; } const closing = closingInputToBase(product, closingInput); const current = Number(state.products?.[product]?.available || 0); const diff = closing - current; if (Math.abs(diff) < 0.000001) { toast('No change. Closing balance already same hai.'); return; } try { const data = await api('/api/products/stock', { method: 'POST', body: { name: product, location: productCategory(product), qty: Math.abs(diff), type: diff > 0 ? 'IN' : 'OUT', date: entryDate, note: 'Closing balance stock update' } }); state = normalizeState(data.state || data.data); $('closingBalanceQty').value = ''; renderAll(); toast(diff > 0 ? `Closing balance saved (${entryDate}): Stock IN +${qty(diff)} ${productUnit(product)}` : `Closing balance saved (${entryDate}): Stock OUT ${qty(Math.abs(diff))} ${productUnit(product)}`, 'success'); } catch (err) { toast(err.message, 'error'); } });
   $('stockForm').addEventListener('submit', async e => { e.preventDefault(); if (!requirePerm('inventory','edit')) return; try { const data = await api('/api/products/stock', { method: 'POST', body: { name: $('stockName').value, location: $('stockLocation').value || 'MAIN', qty: $('stockQty').value, type: $('stockType').value } }); state = normalizeState(data.state || data.data); e.target.reset(); $('stockType').value = 'IN'; if ($('stockAltQty')) $('stockAltQty').value = ''; renderAll(); setTimeout(() => $('stockName').focus(), 50); toast('Stock updated', 'success'); } catch (err) { toast(err.message, 'error'); } }); if ($('orderProduct')) $('orderProduct').addEventListener('change', () => { updateOrderConversionFields(); $('orderQty').value=''; if ($('orderAltQty')) $('orderAltQty').value=''; }); if ($('orderQty')) $('orderQty').addEventListener('input', syncOrderAltFromBase); if ($('orderAltQty')) $('orderAltQty').addEventListener('input', syncOrderBaseFromAlt);
   $('orderItemForm').addEventListener('submit', e => { e.preventDefault(); const product = $('orderProduct').value; const qty = Number.parseFloat($('orderQty').value || '0') || 0; const rate = Number.parseFloat($('orderRate').value || '0') || 0; if (!product || qty <= 0) return toast('Product aur quantity required', 'error'); const existing = cart.find(i => i.product === product); if (existing) { existing.qty += qty; existing.rate = rate; } else cart.push({ product, qty, rate }); $('orderQty').value = ''; if ($('orderAltQty')) $('orderAltQty').value = ''; $('orderRate').value = ''; renderCart(); });
   $('submitOfficeOrderBtn').addEventListener('click', async () => {

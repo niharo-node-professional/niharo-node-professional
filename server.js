@@ -291,11 +291,13 @@ function normalizeStockLedger(input) {
   }).filter(Boolean).slice(0, 10000);
 }
 
-function addStockLedger(store, product, type, qtyChange, opening, closing, note, refId) {
+function addStockLedger(store, product, type, qtyChange, opening, closing, note, refId, dateOverride) {
   const name = productName(product);
   if (!name) return;
   if (!Array.isArray(store.stockLedger)) store.stockLedger = [];
-  const t = today();
+  const t0 = today();
+  const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(String(dateOverride || '')) ? String(dateOverride) : t0.date;
+  const t = { date: safeDate, time: t0.time, iso: safeDate === t0.date ? t0.iso : (safeDate + 'T' + t0.time + ':00.000Z') };
   const unit = productUnit((store.products && store.products[name] && store.products[name].unit) || 'PCS');
   store.stockLedger.unshift({
     id: crypto.randomUUID(),
@@ -943,6 +945,8 @@ async function handleApi(req, res, url) {
     const qty = Math.max(0, Number(b.qty ?? 0));
     const location = productName(b.location || 'MAIN') || 'MAIN';
     const type = String(b.type || 'IN').toUpperCase();
+    const stockDate = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? String(b.date) : today().date;
+    const stockNote = String(b.note || '').trim();
     if (!name || Number.isNaN(qty) || qty < 0) return bad(res, 'Product and valid quantity required');
     await updateStore((store) => {
       if (!store.products[name]) store.products[name] = { name, location, unit: 'PCS', available: 0, lastStatus: '', updatedAt: today().iso };
@@ -953,21 +957,21 @@ async function handleApi(req, res, url) {
         closing = Math.max(0, opening - qty);
         store.products[name].available = closing;
         store.products[name].lastStatus = '-' + qty + ' Out';
-        addStockLedger(store, name, 'OUT', -(opening - closing), opening, closing, 'Manual stock out');
+        addStockLedger(store, name, 'OUT', -(opening - closing), opening, closing, stockNote || 'Manual stock out', null, stockDate);
       } else {
         const qpAdjust = applyQuickProductionAdjustment(store, name, qty);
         const addQty = Math.max(0, Number(qpAdjust.remainingToStock || 0));
         closing = Math.max(0, opening + addQty);
         store.products[name].available = closing;
         if (qpAdjust.adjusted > 0) {
-          addStockLedger(store, name, 'QUICK_ADJUST', 0, opening, opening, `Quick Production adjustment ${qpAdjust.adjusted}; final stock in ${qty}`);
+          addStockLedger(store, name, 'QUICK_ADJUST', 0, opening, opening, `Quick Production adjustment ${qpAdjust.adjusted}; final stock in ${qty}`, null, stockDate);
         }
         if (addQty > 0) {
-          addStockLedger(store, name, 'IN', addQty, opening, closing, qpAdjust.adjusted > 0 ? `Manual stock in after quick adjustment. Adjusted ${qpAdjust.adjusted}` : 'Manual stock in');
+          addStockLedger(store, name, 'IN', addQty, opening, closing, stockNote || (qpAdjust.adjusted > 0 ? `Manual stock in after quick adjustment. Adjusted ${qpAdjust.adjusted}` : 'Manual stock in'), null, stockDate);
         }
         store.products[name].lastStatus = qpAdjust.adjusted > 0 ? `Quick adjusted ${qpAdjust.adjusted}; +${addQty} In` : '+' + qty + ' In';
       }
-      store.products[name].updatedAt = today().iso;
+      store.products[name].updatedAt = stockDate + 'T' + today().time + ':00.000Z';
     });
     return okState(res);
   }

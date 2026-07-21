@@ -156,11 +156,13 @@
           <form id="closingBalanceForm" class="form-grid">
             <div class="col-6"><label>Product smart search</label><input id="closingBalanceProduct" list="closingBalanceProductList" placeholder="Product code/name type karo, jaise 200"><datalist id="closingBalanceProductList"></datalist></div>
             <div class="col-3"><label>App stock abhi</label><div class="filter-summary" id="closingBalanceCurrent">0 UNIT</div></div>
-            <div class="col-3"><label>Actual closing balance</label><input id="closingBalanceQty" type="number" min="0" step="0.01" placeholder="0"></div>
+            <div class="col-2"><label>Closing date</label><input id="closingBalanceDate" type="date"></div>
+            <div class="col-2"><label>Actual closing balance</label><input id="closingBalanceQty" type="number" min="0" step="0.01" placeholder="0"></div>
+            <div class="col-1"><label>Unit</label><select id="closingBalanceUnit"><option value="BASE">Unit</option></select></div>
             <div class="col-12"><div class="filter-summary" id="closingBalancePreview">Product select karo aur actual closing balance daalo.</div></div>
             <button class="btn btn-success col-12" type="submit">Closing balance se stock update karo</button>
           </form>
-          <p class="hint-line" style="margin-top:10px">Example: App stock 10 hai, actual closing 15 hai to system Stock IN +5 karega. Agar actual 8 hai to Stock OUT -2 karega. Positive stock-in pe Quick Production active balance pehle adjust hoga.</p>
+          <p class="hint-line" style="margin-top:10px">Example: Closing date select karke app stock 10 hai, actual closing 15 hai to system Stock IN +5 karega. Agar actual 8 hai to Stock OUT -2 karega. Positive stock-in pe Quick Production active balance pehle adjust hoga.</p>
         </div>
 
         <div class="card">
@@ -365,6 +367,6 @@
 </div>
 
 <div class="toast-stack" id="toastStack"></div>
-<script src="/assets/app.js?v=57clean"></script>
+<script src="/assets/app.js?v=58clean"></script>
 </body>
 </html>

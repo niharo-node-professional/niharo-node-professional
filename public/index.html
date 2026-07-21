@@ -152,6 +152,18 @@
         </div>
 
         <div class="card">
+          <div class="card-title"><div><h2>Closing Balance Stock Update</h2><p>Vardana production abhi use nahi karna ho to daily evening physical closing balance daal kar stock auto update karein.</p></div></div>
+          <form id="closingBalanceForm" class="form-grid">
+            <div class="col-6"><label>Product</label><select id="closingBalanceProduct"></select></div>
+            <div class="col-3"><label>App stock abhi</label><div class="filter-summary" id="closingBalanceCurrent">0 UNIT</div></div>
+            <div class="col-3"><label>Actual closing balance</label><input id="closingBalanceQty" type="number" min="0" step="0.01" placeholder="0"></div>
+            <div class="col-12"><div class="filter-summary" id="closingBalancePreview">Product select karo aur actual closing balance daalo.</div></div>
+            <button class="btn btn-success col-12" type="submit">Closing balance se stock update karo</button>
+          </form>
+          <p class="hint-line" style="margin-top:10px">Example: App stock 10 hai, actual closing 15 hai to system Stock IN +5 karega. Agar actual 8 hai to Stock OUT -2 karega. Positive stock-in pe Quick Production active balance pehle adjust hoga.</p>
+        </div>
+
+        <div class="card">
           <div class="card-title"><div><h2>Usage History</h2><p>Production aur material consumption ka record.</p></div></div>
           <div class="table-wrap"><table><thead><tr><th>Date</th><th>Product</th><th>Qty made</th><th>Material consumed</th><th>Action</th></tr></thead><tbody id="vardanaHistoryBody"></tbody></table></div>
         </div>
@@ -352,6 +364,6 @@
 </div>
 
 <div class="toast-stack" id="toastStack"></div>
-<script src="/assets/app.js?v=54clean"></script>
+<script src="/assets/app.js?v=55clean"></script>
 </body>
 </html>

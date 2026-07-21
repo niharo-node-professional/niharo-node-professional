@@ -59,7 +59,7 @@ function applyActionPermissions() {
     ['targetSetProductSelect','targets','edit'], ['targetSetProductQty','targets','edit'], ['targetSetProductIncentive','targets','edit'], ['targetSetProductDeadline','targets','edit'], ['saveTargetSetProductBtn','targets','edit'],
     ['exportReportXls','reports','export'], ['exportReportPdf','reports','export'],
     ['adminUserId','admin','edit'], ['adminUserName','admin','edit'], ['adminUserPassword','admin','edit'], ['adminUserRole','admin','edit'], ['adminUserActive','admin','edit'], ['saveRolePermissionsBtn','admin','edit'],
-    ['exportBtn','settings','export'], ['resetBtn','settings','delete']
+    ['exportBtn','settings','export'], ['trialResetBtn','settings','delete'], ['resetBtn','settings','delete']
   ].forEach(x => setControlPermission(x[0], x[1], x[2]));
 }
 function applyPermissions() {
@@ -1661,6 +1661,19 @@ function initEvents() {
   $('exportBtn').addEventListener('click', async () => { if (!requirePerm('settings','export')) return; try { const data = await api('/api/export'); const blob = new Blob([JSON.stringify(data.store || data.data || data.state, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'niharo-backup-' + new Date().toISOString().slice(0,10) + '.json'; a.click(); URL.revokeObjectURL(a.href); } catch(e) { toast(e.message, 'error'); } });
   $('importFile').addEventListener('change', async e => { if (!requirePerm('settings','edit')) return; const file = e.target.files[0]; if (!file) return; if (!confirm('Backup import karne se current data replace ho sakta hai. Continue?')) return; try { const raw = JSON.parse(await file.text()); const data = await api('/api/import', { method: 'POST', body: raw }); state = normalizeState(data.state || data.data); renderAll(); toast('Backup imported', 'success'); } catch(err) { toast(err.message, 'error'); } e.target.value = ''; });
   if ($('adminUserForm')) $('adminUserForm').addEventListener('submit', saveAdminUser); if ($('rolePermissionRole')) $('rolePermissionRole').addEventListener('change', renderRolePermissions); if ($('saveRolePermissionsBtn')) $('saveRolePermissionsBtn').addEventListener('click', saveRolePermissions); if ($('allocationMode')) { $('allocationMode').value = localStorage.getItem('niharo_allocation_mode') || 'SMART'; $('allocationMode').addEventListener('change', () => { localStorage.setItem('niharo_allocation_mode', $('allocationMode').value); renderRecentOrders(); renderOrders(); }); } if ($('selectShortageOrdersBtn')) $('selectShortageOrdersBtn').addEventListener('click', () => window.selectShortageOrders()); if ($('clearDispatchSelectionBtn')) $('clearDispatchSelectionBtn').addEventListener('click', () => window.clearDispatchSelection()); if ($('exportDispatchPdfBtn')) $('exportDispatchPdfBtn').addEventListener('click', exportDispatchPdf); if ($('exportWorkerSlipBtn')) $('exportWorkerSlipBtn').addEventListener('click', exportWorkerSlipPdf); if ($('quickProductionSelectedBtn')) $('quickProductionSelectedBtn').addEventListener('click', quickProductionForSelectedOrders); if ($('quickProductionHistoryBtn')) $('quickProductionHistoryBtn').addEventListener('click', openQuickProductionHistory); if ($('closeQuickProductionModalBtn')) $('closeQuickProductionModalBtn').addEventListener('click', closeQuickProductionHistory); if ($('exportDispatchXlsBtn')) $('exportDispatchXlsBtn').addEventListener('click', exportDispatchXls); if ($('copyDispatchWhatsAppBtn')) $('copyDispatchWhatsAppBtn').addEventListener('click', copyDispatchWhatsApp); if ($('openDispatchWhatsAppBtn')) $('openDispatchWhatsAppBtn').addEventListener('click', openDispatchWhatsApp);
+  if ($('trialResetBtn')) $('trialResetBtn').addEventListener('click', async () => {
+    if (!requirePerm('settings','delete')) return;
+    const msg = 'Trial Reset se Orders/Salesman history clear hogi, product stock 0 hoga, quick production/history/targets clear honge. Parties, Items aur Salesman login same rahenge. Continue?';
+    if (!confirm(msg)) return;
+    const val = prompt('Trial reset confirm karne ke liye RESET type karein');
+    if (val !== 'RESET') return;
+    try {
+      const data = await api('/api/reset-trial', { method: 'POST', body: { confirm: 'RESET' } });
+      state = normalizeState(data.state || data.data);
+      renderAll();
+      toast('Trial reset done: orders clear, stock zero, masters safe', 'success');
+    } catch(e) { toast(e.message, 'error'); }
+  });
   $('resetBtn').addEventListener('click', async () => { if (!requirePerm('settings','delete')) return; const val = prompt('Full reset ke liye DELETE type karein'); if (val !== 'DELETE') return; try { const data = await api('/api/reset', { method: 'POST', body: { confirm: 'DELETE' } }); state = normalizeState(data.state || data.data); renderAll(); toast('Database reset', 'success'); } catch(e) { toast(e.message, 'error'); } });
 }
 updateAuthLock();

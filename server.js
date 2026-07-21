@@ -205,7 +205,7 @@ function routePermission(pathname, method) {
   if (p === '/api/db-check') return ['settings','view'];
   if (p === '/api/export') return ['settings','export'];
   if (p === '/api/import') return ['settings','edit'];
-  if (p === '/api/reset') return ['settings','delete'];
+  if (p === '/api/reset' || p === '/api/reset-trial') return ['settings','delete'];
   if (p.startsWith('/api/admin/')) return ['admin', m === 'GET' ? 'view' : (m === 'DELETE' ? 'delete' : 'edit')];
   if (p.startsWith('/api/products')) return ['inventory', m === 'DELETE' ? 'delete' : (m === 'GET' ? 'view' : 'edit')];
   if (p.startsWith('/api/production')) return ['inventory', m === 'GET' ? 'view' : 'edit'];
@@ -1441,6 +1441,45 @@ async function handleApi(req, res, url) {
     });
     return okState(res);
   }
+
+  if (m === 'POST' && p === '/api/reset-trial') {
+    if (!need(req, res, ['admin'])) return;
+    const b = await body(req);
+    if (b.confirm !== 'RESET') return bad(res, 'Confirmation required');
+    await updateStore((store) => {
+      const t = today();
+      // Keep masters: products/items, parties, salesmen, admin users and permissions.
+      // Clear trial transactions: orders/salesman order history, stock qty, ledgers, quick production, targets.
+      const products = store.products && typeof store.products === 'object' ? store.products : {};
+      for (const [name, item] of Object.entries(products)) {
+        if (!item || typeof item !== 'object') continue;
+        item.available = 0;
+        item.lastStatus = 'Trial reset - stock zero';
+        item.updatedAt = t.iso;
+      }
+      store.orders = [];
+      store.stockLedger = [];
+      store.quickProductions = [];
+      // Vardana production/history is trial data; keep material/recipe masters but set material stock to zero.
+      if (!store.vardana || typeof store.vardana !== 'object') store.vardana = { materials: {}, recipes: {}, productions: [] };
+      const materials = store.vardana.materials && typeof store.vardana.materials === 'object' ? store.vardana.materials : {};
+      for (const item of Object.values(materials)) {
+        if (item && typeof item === 'object') {
+          item.available = 0;
+          item.lastStatus = 'Trial reset - vardana stock zero';
+          item.updatedAt = t.iso;
+        }
+      }
+      store.vardana.productions = [];
+      const salesmen = store.salesmen && typeof store.salesmen === 'object' ? store.salesmen : {};
+      for (const s of Object.values(salesmen)) {
+        if (s && typeof s === 'object') s.targets = { categoryTargets: {}, productTargets: {} };
+      }
+      store.meta = Object.assign({}, store.meta || {}, { trialResetAt: t.iso, trialResetMode: 'keep-masters-zero-stock' });
+    });
+    return okState(res);
+  }
+
   if (m === 'POST' && p === '/api/reset') {
     if (!need(req, res, ['admin'])) return;
     const b = await body(req);

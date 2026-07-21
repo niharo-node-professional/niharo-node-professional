@@ -266,7 +266,6 @@ function renderDropdowns() {
   const vardanaProductOptions = ['<option value="">Select product</option>', ...productKeys().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)} (${escapeHtml(productUnit(p))})</option>`)].join('');
   if ($('vardanaRecipeProduct')) preserveSelect($('vardanaRecipeProduct'), vardanaProductOptions);
   if ($('vardanaProductionProduct')) preserveSelect($('vardanaProductionProduct'), vardanaProductOptions);
-  if ($('closingBalanceProductList')) $('closingBalanceProductList').innerHTML = productKeys().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(productCategory(p))} | ${escapeHtml(productUnit(p))}${hasConversion(p) ? ' / ' + escapeHtml(productAltUnit(p)) : ''} | Stock ${qty(state.products[p]?.available || 0)} ${escapeHtml(productUnit(p))}${hasConversion(p) ? ' ≈ ' + qty(baseToAlt(p, state.products[p]?.available || 0)) + ' ' + escapeHtml(productAltUnit(p)) : ''}</option>`).join('');
   if ($('closingBalanceProduct') && !$('closingBalanceProduct').value) $('closingBalanceProduct').placeholder = 'Product code/name type karo, jaise 200';
   if ($('closingBalanceDate') && !$('closingBalanceDate').value) $('closingBalanceDate').value = new Date().toISOString().slice(0,10);
   const rp = $('vardanaRecipeProduct') ? $('vardanaRecipeProduct').value : '';
@@ -1510,6 +1509,52 @@ function closingInputToBase(product, value) {
   const n = Number(value || 0);
   return selectedClosingUnit(product) === 'ALT' ? altToBase(product, n) : n;
 }
+
+function closingProductMatches(text) {
+  const q = String(text || '').trim().toLowerCase();
+  if (!q) return [];
+  const keys = productKeys();
+  const starts = [];
+  const includes = [];
+  keys.forEach(p => {
+    const name = p.toLowerCase();
+    const cat = productCategory(p).toLowerCase();
+    const hay = `${name} ${cat}`;
+    if (name.startsWith(q)) starts.push(p);
+    else if (hay.includes(q)) includes.push(p);
+  });
+  return [...starts, ...includes].slice(0, 25);
+}
+function hideClosingProductSuggestions() {
+  const box = $('closingBalanceProductSuggest');
+  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+}
+function showClosingProductSuggestions() {
+  const input = $('closingBalanceProduct');
+  const box = $('closingBalanceProductSuggest');
+  if (!input || !box) return;
+  const text = input.value || '';
+  const matches = closingProductMatches(text);
+  if (!text.trim()) { hideClosingProductSuggestions(); return; }
+  if (!matches.length) {
+    box.innerHTML = '<div class="product-suggestion-empty">Product nahi mila</div>';
+    box.style.display = 'block';
+    return;
+  }
+  box.innerHTML = matches.map(p => {
+    const base = productUnit(p);
+    const alt = hasConversion(p) ? ' / ' + productAltUnit(p) : '';
+    const stock = `${qty(state.products[p]?.available || 0)} ${base}` + (hasConversion(p) ? ` ≈ ${qty(baseToAlt(p, state.products[p]?.available || 0))} ${productAltUnit(p)}` : '');
+    return `<button type="button" class="product-suggestion-item" data-product="${escapeHtml(p)}"><span><b>${escapeHtml(p)}</b><br><small>${escapeHtml(productCategory(p))} | ${escapeHtml(base + alt)}</small></span><span class="product-suggestion-meta">${escapeHtml(stock)}</span></button>`;
+  }).join('');
+  box.style.display = 'block';
+}
+function selectClosingProduct(product) {
+  if ($('closingBalanceProduct')) $('closingBalanceProduct').value = product;
+  hideClosingProductSuggestions();
+  updateClosingBalancePreview();
+  if ($('closingBalanceQty')) $('closingBalanceQty').focus();
+}
 function refreshClosingUnitOptions(product) {
   const el = $('closingBalanceUnit');
   if (!el) return;
@@ -1648,7 +1693,7 @@ function round2(n) { return Math.round(Number(n || 0) * 10000) / 10000; }
 
 function initEvents() {
   $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => { $$('.nav-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); $$('.screen').forEach(s => s.classList.remove('active')); $('screen-' + btn.dataset.screen).classList.add('active'); const titles = { dashboard: ['Warehouse dashboard','Inventory, pending orders, dispatch aur MIS ek jagah.'], inventory: ['Inventory','Stock master aur shortage planning.'], vardana: ['Vardana','Packing material stock, recipe aur production stock in.'], orders: ['Orders','Pending aur completed orders tracker.'], masters: ['Master data','Parties aur salesman login management.'], targets: ['Targets','Salesman category/product target tracker.'], reports: ['MIS report','Business report aur filters.'], settings: ['Settings','Backup, restore aur phone web app link.'], admin: ['Admin Panel','Warehouse users, roles aur permissions.'] }; $('pageTitle').textContent = titles[btn.dataset.screen][0]; $('pageSubtitle').textContent = titles[btn.dataset.screen][1]; document.body.classList.remove('nav-open'); renderAll(); }));
-  $('drawerBtn').addEventListener('click', () => document.body.classList.toggle('nav-open')); $('globalSearch').addEventListener('input', renderAll); ['filterSalesman','filterStatus','filterShortage','inventoryCategoryFilter','inventoryStockFilter','inventorySortFilter','inventoryHistoryProduct','inventoryHistoryFrom','inventoryHistoryTo','reportFrom','reportTo','reportSalesman','reportParty','reportProduct','targetSalesmanFilter','targetCategoryFilter','targetProductFilter','vardanaRecipeProduct','vardanaProductionProduct','closingBalanceDate'].forEach(id => { if ($(id)) $(id).addEventListener('change', renderAll); }); if ($('closingBalanceProduct')) { $('closingBalanceProduct').addEventListener('input', updateClosingBalancePreview); $('closingBalanceProduct').addEventListener('change', updateClosingBalancePreview); } if ($('vardanaProductionQty')) $('vardanaProductionQty').addEventListener('input', renderVardanaPreview); if ($('closingBalanceQty')) $('closingBalanceQty').addEventListener('input', updateClosingBalancePreview); if ($('closingBalanceUnit')) $('closingBalanceUnit').addEventListener('change', updateClosingBalancePreview);
+  $('drawerBtn').addEventListener('click', () => document.body.classList.toggle('nav-open')); $('globalSearch').addEventListener('input', renderAll); ['filterSalesman','filterStatus','filterShortage','inventoryCategoryFilter','inventoryStockFilter','inventorySortFilter','inventoryHistoryProduct','inventoryHistoryFrom','inventoryHistoryTo','reportFrom','reportTo','reportSalesman','reportParty','reportProduct','targetSalesmanFilter','targetCategoryFilter','targetProductFilter','vardanaRecipeProduct','vardanaProductionProduct','closingBalanceDate'].forEach(id => { if ($(id)) $(id).addEventListener('change', renderAll); }); if ($('closingBalanceProduct')) { $('closingBalanceProduct').addEventListener('input', () => { showClosingProductSuggestions(); updateClosingBalancePreview(); }); $('closingBalanceProduct').addEventListener('focus', showClosingProductSuggestions); $('closingBalanceProduct').addEventListener('change', updateClosingBalancePreview); $('closingBalanceProduct').addEventListener('keydown', e => { if (e.key === 'Enter') { const matches = closingProductMatches($('closingBalanceProduct').value); if (matches.length) { e.preventDefault(); selectClosingProduct(matches[0]); } } }); } if ($('closingBalanceProductSuggest')) { $('closingBalanceProductSuggest').addEventListener('mousedown', e => { const btn = e.target.closest('.product-suggestion-item'); if (btn) { e.preventDefault(); selectClosingProduct(btn.dataset.product || ''); } }); } document.addEventListener('click', e => { if ($('closingBalanceProduct') && $('closingBalanceProductSuggest') && !e.target.closest('#closingBalanceProduct') && !e.target.closest('#closingBalanceProductSuggest')) hideClosingProductSuggestions(); }); if ($('vardanaProductionQty')) $('vardanaProductionQty').addEventListener('input', renderVardanaPreview); if ($('closingBalanceQty')) $('closingBalanceQty').addEventListener('input', updateClosingBalancePreview); if ($('closingBalanceUnit')) $('closingBalanceUnit').addEventListener('change', updateClosingBalancePreview);
   $('exportReportXls').addEventListener('click', exportReportXls); $('exportReportPdf').addEventListener('click', exportReportPdf); $('clearReportFilters').addEventListener('click', () => { ['reportFrom','reportTo'].forEach(id => $(id).value = ''); ['reportSalesman','reportParty','reportProduct'].forEach(id => $(id).value = 'ALL'); renderAll(); });
   if ($('closeTargetModalBtn')) $('closeTargetModalBtn').addEventListener('click', () => $('targetModal').classList.remove('show')); if ($('saveCategoryTargetBtn')) $('saveCategoryTargetBtn').addEventListener('click', () => saveTarget('category')); if ($('saveProductTargetBtn')) $('saveProductTargetBtn').addEventListener('click', () => saveTarget('product')); if ($('saveTargetSetCategoryBtn')) $('saveTargetSetCategoryBtn').addEventListener('click', () => saveTargetFromTargets('category')); if ($('saveTargetSetProductBtn')) $('saveTargetSetProductBtn').addEventListener('click', () => saveTargetFromTargets('product')); $('adminLoginBtn').addEventListener('click', () => showLogin(false)); $('closeLoginBtn').addEventListener('click', hideLogin); $('doLoginBtn').addEventListener('click', async () => { try { const data = await api('/api/admin/login', { method: 'POST', body: { user: $('adminUser').value, password: $('adminPassword').value } }); adminToken = data.token; adminUser = data.user?.username || $('adminUser').value || 'admin'; adminRole = data.user?.adminRole || 'Viewer'; adminPermissions = data.user?.permissions || {}; localStorage.setItem('niharo_admin_token', adminToken); localStorage.setItem('niharo_admin_user', adminUser); localStorage.setItem('niharo_admin_role', adminRole); localStorage.setItem('niharo_admin_permissions', JSON.stringify(adminPermissions || {})); updateAuthLock(); $('loginModal').classList.remove('show'); $('adminPassword').value = ''; toast('Warehouse login successful', 'success'); await loadState(); } catch (e) { toast(e.message, 'error'); } }); $('adminPassword').addEventListener('keydown', e => { if (e.key === 'Enter') $('doLoginBtn').click(); }); if ($('adminUser')) $('adminUser').addEventListener('keydown', e => { if (e.key === 'Enter') $('adminPassword').focus(); }); $('adminLogoutBtn').addEventListener('click', () => { adminToken = ''; adminUser = ''; adminRole = ''; adminPermissions = {}; localStorage.removeItem('niharo_admin_token'); localStorage.removeItem('niharo_admin_user'); localStorage.removeItem('niharo_admin_role'); localStorage.removeItem('niharo_admin_permissions'); updateAuthLock(); state = { products: {}, parties: [], orders: [], salesmen: [], vardana: { materials: {}, recipes: {}, productions: [] }, stockLedger: [], adminUsers: [], rolePermissions: {}, meta: {} }; renderAll(); showLogin(true); toast('Logged out'); });
   $('stockName').addEventListener('input', handleStockNameInput);

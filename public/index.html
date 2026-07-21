@@ -154,7 +154,7 @@
         <div class="card">
           <div class="card-title"><div><h2>Closing Balance Stock Update</h2><p>Vardana production abhi use nahi karna ho to daily evening physical closing balance daal kar stock auto update karein.</p></div></div>
           <form id="closingBalanceForm" class="form-grid">
-            <div class="col-6"><label>Product smart search</label><input id="closingBalanceProduct" list="closingBalanceProductList" placeholder="Product code/name type karo, jaise 200"><datalist id="closingBalanceProductList"></datalist></div>
+            <div class="col-6" style="position:relative"><label>Product smart search</label><input id="closingBalanceProduct" placeholder="Product code/name type karo, jaise 200" autocomplete="off"><div id="closingBalanceProductSuggest" class="product-suggestions" style="display:none"></div></div>
             <div class="col-3"><label>App stock abhi</label><div class="filter-summary" id="closingBalanceCurrent">0 UNIT</div></div>
             <div class="col-2"><label>Closing date</label><input id="closingBalanceDate" type="date"></div>
             <div class="col-2"><label>Actual closing balance</label><input id="closingBalanceQty" type="number" min="0" step="0.01" placeholder="0"></div>

@@ -1721,8 +1721,26 @@ function initEvents() {
   $('drawerBtn').addEventListener('click', () => document.body.classList.toggle('nav-open')); $('globalSearch').addEventListener('input', renderAll); ['filterSalesman','filterStatus','filterShortage','inventoryCategoryFilter','inventoryStockFilter','inventorySortFilter','inventoryHistoryProduct','inventoryHistoryFrom','inventoryHistoryTo','reportFrom','reportTo','reportSalesman','reportParty','reportProduct','targetSalesmanFilter','targetCategoryFilter','targetProductFilter','vardanaRecipeProduct','vardanaProductionProduct'].forEach(id => { if ($(id)) $(id).addEventListener('change', renderAll); }); if ($('closingBalanceProduct')) { $('closingBalanceProduct').addEventListener('input', () => { showClosingProductSuggestions(); updateClosingBalancePreview(); }); $('closingBalanceProduct').addEventListener('focus', showClosingProductSuggestions); $('closingBalanceProduct').addEventListener('change', updateClosingBalancePreview); $('closingBalanceProduct').addEventListener('keydown', e => {
       const box = $('closingBalanceProductSuggest');
       const open = box && box.style.display !== 'none';
-      if (e.key === 'ArrowDown') { e.preventDefault(); showClosingProductSuggestions(); highlightClosingSuggestion(closingSuggestionIndex + 1); return; }
-      if (e.key === 'ArrowUp') { e.preventDefault(); showClosingProductSuggestions(); highlightClosingSuggestion((closingSuggestionIndex <= 0 ? 0 : closingSuggestionIndex - 1)); return; }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (!open) {
+          showClosingProductSuggestions();
+        } else {
+          highlightClosingSuggestion(closingSuggestionIndex + 1);
+        }
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!open) {
+          showClosingProductSuggestions();
+          const items = Array.from(box.querySelectorAll('.product-suggestion-item'));
+          if (items.length) highlightClosingSuggestion(items.length - 1);
+        } else {
+          highlightClosingSuggestion(closingSuggestionIndex - 1);
+        }
+        return;
+      }
       if (e.key === 'Enter') {
         if (open && pickHighlightedClosingSuggestion()) { e.preventDefault(); return; }
         const matches = closingProductMatches($('closingBalanceProduct').value);

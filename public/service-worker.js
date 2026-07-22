@@ -1,5 +1,5 @@
-const CACHE_NAME = 'niharo-wms-pro-v18';
-const ASSETS = ['/', '/salesman', '/assets/styles.css?v=18', '/assets/app.js?v=18', '/assets/salesman.js?v=18', '/manifest.json', '/assets/icon.svg'];
+const CACHE_NAME = 'niharo-wms-pro-v61-arrowfix';
+const ASSETS = ['/', '/salesman', '/assets/styles.css?v=18', '/assets/app.js?v=61-arrowfix', '/assets/salesman.js?v=18', '/manifest.json', '/assets/icon.svg'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).catch(() => null));
   self.skipWaiting();
